@@ -1,3 +1,11 @@
+# ignore image files
 *.sif
+
+# ignore object and shared object files
 *.so
 *.o
+
+# ignore operating system files and temp files
+.DS_Store
+~*
+*.swp
