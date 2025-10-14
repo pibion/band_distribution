@@ -48,7 +48,7 @@ docker run -it --rm -p 8888:8888 -v /mnt/c/Users/canto/Repositories/nrFanoII:/ho
 ```
 
 # Profiling with TAU
-I ran into trouble installing TAU, so I recommend using Docker.
+I ran into trouble installing TAU, so I recommend using Docker. I use the container created by E4S (https://e4s.io/):
 
 ```
 docker pull ecpe4s/e4s-cpu:latest
