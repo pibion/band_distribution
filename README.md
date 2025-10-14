@@ -77,7 +77,7 @@ And you'll need to move into the mounted directory that contains the fortran fil
 cd app
 ```
 
-It's probably wise to make the code compiles normally:
+It's probably wise to check that the code compiles normally:
 
 ```
 gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
