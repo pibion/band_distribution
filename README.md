@@ -77,13 +77,19 @@ And you'll need to move into the mounted directory that contains the fortran fil
 cd app
 ```
 
-It's probably wise to check that the code compiles normally:
+E4S currently uses an older (pre-13) version of gcc, so for the gfortran compiler to work we'll have to set `FCFLAGS`:
+
+```
+ FCFLAGS+=/usr/lib/gcc/x86_64-linux-gnu/11/
+```
+
+Now we can check that the code compiles normally:
 
 ```
 gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
 ```
 
-Before trying to instrument with TAU:
+And now we can try to instrument with TAU:
 
 ```
 rm test_ppq
