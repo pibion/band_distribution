@@ -1,0 +1,13 @@
+name: NR_Fano
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - lmfit
+  - ipykernel
+  - matplotlib
+  - pandas
+  - pytables
+  - scikit-learn=1.6.1
+  - joblib=1.4.2
