@@ -1,3 +1,6 @@
+This code is useful for dark matter searches where detector output is Ep (total phonon energy) and Eq (total charge energy).  The point of the code is to provide the probability of an (Ep, Eq) pair given a set of detector parameters for both electron recoils (`PpqG`, where the G is for gamma because gammas are the cause of most electron recoils) and neutron recoils (`PpqN`, where the N is for neutron).
+
+
 # Compile with
 You can replace the 4 with the number of processes you'd like to parallelize to.
 
@@ -16,15 +19,14 @@ or if you just want to test the vectorized functions `PpqN_vector` and `PpqG_vec
 python test_PpqFort_vectorFuncs.py
 ```
 
-# Build the docker container for HPC submissions
+# Build the singularity/apptainer container for HPC submissions
 You should issue the following command in the `fortran-python` directory:
 
 ```
 docker build -f Dockerfile -t fano_fort .
 ```
 
-# And now build the Singularity Image File (also for HPC submissions)
-This command can be issued in any location (it is not directory dependent).
+Now you have a docker container, but this is not usable on HPC systems.  Run this command to create `fano_fort.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
 
 ```
 apptainer build fano_fort.sif docker-daemon://fano_fort:latest
