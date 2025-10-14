@@ -64,16 +64,28 @@ docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -v "$XAUTH/.Xauthority:/root/.Xa
 docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -v "$XAUTH/.Xauthority:/root/.Xauthority" -v ($pwd):/app ecpe4s/e4s-cpu:latest
 ```
 
-Inside the docker prompt, you'll need to set the DISPLAY environment variable:
+Inside the docker prompt, you'll need to set the DISPLAY environment variable.  After this, tools that require a GUI window like `paraprof` will work.
 
 ```
 export DISPLAY=:0.0
 ```
 
-Now tools that require a GUI window like `paraprof` will work.
-
-And if that completes correctly you're ready to compile with tau hooks:
+And you'll need to move into the mounted directory that contains the fortran files:
 
 ```
-tau_exec gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq ./test_ppq
+# this command assumes you're in the root directory
+cd app
+```
+
+It's probably wise to make the code compiles normally:
+
+```
+gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
+```
+
+Before trying to instrument with TAU:
+
+```
+rm test_ppq
+tau_exec gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
 ```
