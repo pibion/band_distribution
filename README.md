@@ -93,5 +93,7 @@ And now we can try to instrument with TAU:
 
 ```
 rm test_ppq
-tau_exec gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
+export TAU_MAKEFILE=/spack/opt/spack/linux-ubuntu22.04-x86_64_v3/gcc-11.4.0/tau-2.34.1-qruklusqgoww5pzgc4f2ffcpybmkbzpy/lib/Makefile.tau-papi-ompt-mpi-pthread-python-pdt-openmp
+export TAU_OPTIONS="-optCompInst -optVerbose -optNoRevert”
+tau_f90.sh -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
 ```
