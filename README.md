@@ -94,6 +94,17 @@ And now we can try to instrument with TAU:
 ```
 rm test_ppq
 export TAU_MAKEFILE=/spack/opt/spack/linux-ubuntu22.04-x86_64_v3/gcc-11.4.0/tau-2.34.1-qruklusqgoww5pzgc4f2ffcpybmkbzpy/lib/Makefile.tau-papi-ompt-mpi-pthread-python-pdt-openmp
-export TAU_OPTIONS="-optCompInst -optVerbose -optNoRevert”
+export TAU_OPTIONS="-optCompInst -optVerbose -optNoRevert"
+export TAU_THROTTLE=0
 tau_f90.sh -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
 ```
+
+And then run the instrumented code with 
+
+```
+mpirun -np 1 ./test_ppq
+```
+
+In other circumstances you'd just run `./test_ppq` but in this case that doesn't work because TAU was compiled with MPI support and this is a non-MPI application.
+
+Running the code will produce a file `profile.0.0.0` in the `/app` directory which you can investigate using `pprof` (terminal summary) or `paraprof` (GUI view).
