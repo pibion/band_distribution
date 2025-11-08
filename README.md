@@ -7,7 +7,6 @@ You can replace the 4 with the number of processes you'd like to parallelize to.
 ```
 gfortran -fPIC -shared -O3 -march=native -ffast-math -fopenmp -ftree-parallelize-loops=4 -o PpqFort.so PpqFort.f90
 ```
-
 # And then test with
 ```
 python test_PpqFort.py
@@ -108,3 +107,12 @@ mpirun -np 1 ./test_ppq
 In other circumstances you'd just run `./test_ppq` but in this case that doesn't work because TAU was compiled with MPI support and this is a non-MPI application.
 
 Running the code will produce a file `profile.0.0.0` in the `/app` directory which you can investigate using `pprof` (terminal summary) or `paraprof` (GUI view).
+
+## Building and testing with the Fortran Package Manager (fpm)
+
+|Vendor|  Build/Test Command                                           |
+|------|---------------------------------------------------------------|
+|GNU   | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4"` |
+|Intel | `fpm test --compiler ifx --profile release`                   |
+|LLVM  | `fpm test --compiler flang-new --profile release --flag -O3 ` |
+|NAG   | `fpm test --compiler nagfor --flag -O4`                       |
