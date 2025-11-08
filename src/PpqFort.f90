@@ -295,6 +295,9 @@ module PpqFort
       integral = 0.0d0
   
       ! Optimizable loop
+      ! gfortran may not support this in our Expanse version
+      ! we want the latest llvm-flang (v. 20) compiler
+      ! do concurrent(i = 1:npts) default (none)
       do concurrent(i = 1:npts)
           integral = integral + PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
       end do
