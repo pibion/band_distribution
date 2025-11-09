@@ -63,6 +63,13 @@ COPY python /app/python/
 COPY *.py /app
 
 # Now compile the fortran code
+<<<<<<< HEAD
 RUN fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4" \
+=======
+# I'm really not sure why we have to run .bashrc here,
+# but we do
+RUN . ~/.bashrc \
+    && fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4" \
+>>>>>>> feae5c6 (Dockerfile is working for gfortran compiler)
     && fpm install --prefix=.
 
