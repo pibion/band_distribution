@@ -4,7 +4,7 @@ import os
 
 folderpath = '' 
 if os.name == 'posix': #Linux/Mac
-    DLLname = 'PpqFort.so'
+    DLLname = 'lib/libband_distribution.so'
 else:
     print ('OS other than Linux/Mac are not supported')
 
