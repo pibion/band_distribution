@@ -37,11 +37,29 @@ COPY NR_Fano_dan_env.yaml .
 RUN conda env create -f NR_Fano_dan_env.yaml
 RUN echo "conda activate NR_Fano" >> ~/.bashrc
 
+# Install fpm from source
+# the current release doesn't support shared library building
+RUN cd /tmp \
+    && git clone https://github.com/fortran-lang/fpm \
+    && cd fpm \
+    && ./install.sh \
+    && rm -rf fpm
+
+RUN echo "export PATH=/root/.local/bin:$PATH" >> ~/.bashrc
+
 # Copy the fortran code over
-COPY PpqFort.f90 .
+# first we build the expected directory structure
+# and then we copy files
+RUN mkdir /app/PpqFort
+RUN mkdir /app/PpqFort/src
+RUN mkdir /app/PpqFort/test
+
+COPY src /app/PpqFort/src/
+COPY test /app/PpqFort/test
+COPY fpm.toml /app/PpqFort
 
 # Now compile the fortran code
-RUN gfortran -fPIC -shared -O3 -march=native -ffast-math -fopenmp -ftree-parallelize-loops=4 -o PpqFort.so PpqFort.f90
+# RUN gfortran -fPIC -shared -O3 -march=native -ffast-math -fopenmp -ftree-parallelize-loops=4 -o PpqFort.so PpqFort.f90
 
 # Set the shell to bash with login to ensure .bashrc is sourced
 SHELL ["/bin/bash", "--login", "-c"]

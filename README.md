@@ -1,13 +1,20 @@
 This code is useful for dark matter searches where detector output is Ep (total phonon energy) and Eq (total charge energy).  The point of the code is to provide the probability of an (Ep, Eq) pair given a set of detector parameters for both electron recoils (`PpqG`, where the G is for gamma because gammas are the cause of most electron recoils) and neutron recoils (`PpqN`, where the N is for neutron).
 
 
-# Compile with
-You can replace the 4 with the number of processes you'd like to parallelize to.
+## Building and testing with the Fortran Package Manager (fpm)
 
-```
-gfortran -fPIC -shared -O3 -march=native -ffast-math -fopenmp -ftree-parallelize-loops=4 -o PpqFort.so PpqFort.f90
-```
-# And then test with
+This project uses the Fortran Package Manager (fpm).  You'll need to install that to build this project; please see https://fpm.fortran-lang.org/install/index.html#install for instructions on installing fpm on your system.
+
+|Vendor|  Build/Test Command                                           |
+|------|---------------------------------------------------------------|
+|GNU   | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4"` |
+|Intel | `fpm test --compiler ifx --profile release`                   |
+|LLVM  | `fpm test --compiler flang-new --profile release --flag -O3 ` |
+|NAG   | `fpm test --compiler nagfor --flag -O4`                       |
+
+# Testing the python calls
+This code builds a library that may be called within python (this is the original intent of the code).  To test the python calls, run
+
 ```
 python test_PpqFort.py
 ```
@@ -23,6 +30,12 @@ You should issue the following command in the `fortran-python` directory:
 
 ```
 docker build -f Dockerfile -t fano_fort .
+```
+
+You can shell into this container with the command
+
+```
+docker run -it --entrypoint /bin/bash fano_fort
 ```
 
 Now you have a docker container, but this is not usable on HPC systems.  Run this command to create `fano_fort.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
