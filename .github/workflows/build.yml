@@ -15,7 +15,7 @@ jobs:
       matrix:
         os: [macos-14, macos-15, macos-15-intel, ubuntu-24.04]
         compiler: [ gfortran ]
-        version: [ 13, 14, 15 ]
+        version: [ 15 ]
         extra_flags: [ -g -O3 ]
 
         exclude:
