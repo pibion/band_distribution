@@ -117,7 +117,7 @@ When `fpm` 0.13.0 (once released) or later, one can replace `flang-new` below wi
 |------|-----------------|--------------------------------------------------------------|
 |GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4"` |
 |      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
-|Intel | 2025.2.1        | `fpm test --compiler ifx --profile release`                  |
+|Intel | 2025.2.1        | `FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release` |
 |LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag -O3` |
 |      | 19              | `fpm test --compiler flang-new --profile release --flag "-O3 -mmlir -allow-assumed-rank"` |
 |NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
