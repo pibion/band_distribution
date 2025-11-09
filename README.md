@@ -110,8 +110,8 @@ Running the code will produce a file `profile.0.0.0` in the `/app` directory whi
 
 ## Building and testing with the Fortran Package Manager (`fpm`)
 
-The commands below have been tested with `fpm` 0.12.0 and with the cmpiler versions shown.
-When `fpm` 0.13.0 (once released) or later, one can replace `flang-new` below with `flang`.
+The commands below should work with `fpm` 0.12.0 and with the compiler versions shown.
+With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `flang`.
 
 |Vendor| Version(s)      |  Build/Test Command                                          |
 |------|-----------------|--------------------------------------------------------------|
@@ -121,3 +121,6 @@ When `fpm` 0.13.0 (once released) or later, one can replace `flang-new` below wi
 |LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag -O3` |
 |      | 19              | `fpm test --compiler flang-new --profile release --flag "-O3 -mmlir -allow-assumed-rank"` |
 |NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
+
+**Caveat:** In the case of LLVM 19-20, the above commands succeed for testing band_distribution's Julienne dependency.
+An future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
