@@ -116,3 +116,7 @@ Running the code will produce a file `profile.0.0.0` in the `/app` directory whi
 |Intel | `fpm test --compiler ifx --profile release`                   |
 |LLVM  | `fpm test --compiler flang-new --profile release --flag -O3 ` |
 |NAG   | `fpm test --compiler nagfor --flag -O4`                       |
+
+# Documentation
+With [ford](https://github.com/Fortran-FOSS-Programmers/ford) installed, run `ford ford.md`.
+Then open `doc/html/index.html` in a web browser to see the band_distribution documentation.

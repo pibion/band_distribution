@@ -21,3 +21,6 @@ a.out
 *.o
 *.dylib
 *.dll
+
+# Ford-generated documentation folder
+doc/html
