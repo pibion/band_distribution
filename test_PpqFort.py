@@ -4,7 +4,7 @@ import sys
 import os
 
 # Path to the directory containing PpqDist_v6.py
-module_dir = '../python'
+module_dir = './python'
 sys.path.append(module_dir)
 
 # File PpqDist_v6 contains our existing (tested!) python functions
@@ -13,7 +13,7 @@ import pq_dist_v6 as ppq
 
 folderpath = '' 
 if os.name == 'posix': #Linux/Mac
-    DLLname = 'PpqFort.so'
+    DLLname = 'lib/libband_distribution.so'
 else:
     print ('OS other than Linux/Mac are not supported')
 

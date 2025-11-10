@@ -1,4 +1,10 @@
 name = "band_distribution"
 
+[install]
+library = true
+
+[library]
+type = "shared"  
+
 [dependencies]
 julienne = {git = "https://github.com/berkeleylab/julienne", tag = "3.2.1"}
