@@ -121,3 +121,7 @@ When `fpm` 0.13.0 (once released) or later, one can replace `flang-new` below wi
 |LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag -O3` |
 |      | 19              | `fpm test --compiler flang-new --profile release --flag "-O3 -mmlir -allow-assumed-rank"` |
 |NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
+
+# Documentation
+With [ford](https://github.com/Fortran-FOSS-Programmers/ford) installed, run `ford ford.md`.
+Then open `doc/html/index.html` in a web browser to see the band_distribution documentation.
