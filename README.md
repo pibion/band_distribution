@@ -32,7 +32,7 @@ You should issue the following command in the `fortran-python` directory:
 docker build -f Dockerfile -t fano_fort .
 ```
 
-You can shell into this container with the command
+If you need to troubleshoot the docker build, you can shell into this container with the command
 
 ```
 docker run -it --entrypoint /bin/bash fano_fort
@@ -42,7 +42,13 @@ Now you have a docker container, but this is not usable on HPC systems.  Run thi
 
 ```
 apptainer build fano_fort.sif docker-daemon://fano_fort:latest
+```
 
+# Use the docker container for local development
+For local development, you most likely want the files available to you in a way that persists once you close the container.  In this case you need to supply arguments to `docker run` that mount the top-level directory:
+
+```
+docker run -it --mount type=bind,src=.,dst=/app --entrypoint=/bin/bash fano_intel
 ```
 
 # Build the docker container for running Jupyter and interacting with notebooks
