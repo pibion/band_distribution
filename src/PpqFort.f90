@@ -5,9 +5,9 @@ module PpqFort
   ! Define pi
   real(c_double), parameter :: pi = acos(-1.0d0)
 
-  contains
-   !the ionization yield. 
+  contains 
    pure function Y(Er, a, b) result(res) bind(c, name="Y")
+       !! the ionization yield, using the "standard" CDMS model \(a E_r^b\)
        real(c_double), value :: Er, a, b
        real(c_double) :: res
        
@@ -15,24 +15,24 @@ module PpqFort
        res = a * abs(Er)**b
     end function Y
   
-    ! Model the Fano factor as a linear function
     pure function F(Er, F0, s) result(res) bind(c, name="F")
+      !! Model the Fano factor as a linear function
       real(c_double), value :: Er, F0, s
       real(c_double) :: res
 
       res = F0 + s * Er
    end function F
 
-   ! average number of electron-hole pairs for a given Er
    pure function Nbar(Er, a, b, eps) result(res) bind(c, name="Nbar")
+     !! average number of electron-hole pairs for a given Er
      real(c_double), value :: Er, a, b, eps
      real(c_double) :: res
    
      res = Y(Er, a, b) * Er / eps
    end function Nbar
 
-   ! phonon sensor resolution
    pure function sigp(Ep, eps, V, p0, p10) result(res) bind(c, name="sigp")
+      !! phonon sensor resolution
       real(c_double), value :: Ep, eps, V, p0, p10
       real(c_double) :: res
       real(c_double) :: e2pre, e2e
@@ -42,8 +42,8 @@ module PpqFort
       res = sqrt(p0**2 + e2pre * e2e)
    end function sigp
 
-   ! charge sensor resolution
    pure function sigq(Eq, q0, q10) result(res) bind(c, name="sigq")
+   !! charge sensor resolution
       real(c_double), value :: Eq, q0, q10
       real(c_double) :: res
       real(c_double) :: e2pre, e2e
@@ -53,8 +53,8 @@ module PpqFort
       res = sqrt(q0**2 + e2pre * e2e)
    end function sigq
 
-    ! the Er (energy) distribution of neutrons
-    pure function PErN(Er) result(res) bind(c, name="PErN")
+  pure function PErN(Er) result(res) bind(c, name="PErN")
+    !! the Er (energy) distribution of neutrons
     real(c_double), value :: Er
     real(c_double) PNa, PNb, PNd
     real(c_double) :: res
@@ -73,8 +73,8 @@ module PpqFort
     end if
   end function PErN
 
-  ! the Er (energy) distribution of gamma events/electron recoils
   pure function PErG(Er) result(res) bind(c, name="PErG")
+    !! the Er (energy) distribution of gamma events/electron recoils
     real(c_double), value :: Er
     real(c_double) :: PGa, PGb, PGd
     real(c_double) :: res

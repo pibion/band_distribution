@@ -8,6 +8,8 @@ dependencies:
   - ifx_linux-64
   - mpi4py
   - fpm
+  - ford
+  - graphviz
   - lmfit
   - ipykernel
   - matplotlib
