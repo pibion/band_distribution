@@ -34,10 +34,18 @@ python test_PpqFort_vectorFuncs.py
 ```
 
 # Build the singularity/apptainer container for HPC submissions
-You should issue the following command in the `fortran-python` directory:
+There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  
+
+|Vendor| Dockerfile name     |
+|------|---------------------|
+|GNU   | Dockerfile          | 
+|Intel | Dockerfile_intel    | 
+|LLVM  | Dockerfile_llvm     |
+
+Choose which compiler you want, determine the name of the dockerfile, and then issue the following command in the `fortran-python` directory:
 
 ```
-docker build -f Dockerfile -t fano_fort .
+docker build -f {dockerfile name} -t fano_fort .
 ```
 
 If you need to troubleshoot the docker build, you can shell into this container with the command
@@ -46,7 +54,7 @@ If you need to troubleshoot the docker build, you can shell into this container 
 docker run -it --entrypoint /bin/bash fano_fort
 ```
 
-Now you have a docker container, but this is not usable on HPC systems.  Run this command to create `fano_fort.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
+Now you have a docker container that contains the fortran binary, but this is not usable on HPC systems.  Run this command to create `fano_fort.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
 
 ```
 apptainer build fano_fort.sif docker-daemon://fano_fort:latest
