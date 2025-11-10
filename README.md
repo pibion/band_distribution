@@ -108,14 +108,19 @@ In other circumstances you'd just run `./test_ppq` but in this case that doesn't
 
 Running the code will produce a file `profile.0.0.0` in the `/app` directory which you can investigate using `pprof` (terminal summary) or `paraprof` (GUI view).
 
-## Building and testing with the Fortran Package Manager (fpm)
+## Building and testing with the Fortran Package Manager (`fpm`)
 
-|Vendor|  Build/Test Command                                           |
-|------|---------------------------------------------------------------|
-|GNU   | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4"` |
-|Intel | `fpm test --compiler ifx --profile release`                   |
-|LLVM  | `fpm test --compiler flang-new --profile release --flag -O3 ` |
-|NAG   | `fpm test --compiler nagfor --flag -O4`                       |
+The commands below have been tested with `fpm` 0.12.0 and with the cmpiler versions shown.
+When `fpm` 0.13.0 (once released) or later, one can replace `flang-new` below with `flang`.
+
+|Vendor| Version(s)      |  Build/Test Command                                          |
+|------|-----------------|--------------------------------------------------------------|
+|GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4"` |
+|      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
+|Intel | 2025.2.1        | `fpm test --compiler ifx --profile release`                  |
+|LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag -O3` |
+|      | 19              | `fpm test --compiler flang-new --profile release --flag "-O3 -mmlir -allow-assumed-rank"` |
+|NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
 
 # Documentation
 With [ford](https://github.com/Fortran-FOSS-Programmers/ford) installed, run `ford ford.md`.

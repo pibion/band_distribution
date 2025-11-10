@@ -1,1 +1,4 @@
 name = "band_distribution"
+
+[dependencies]
+julienne = {git = "https://github.com/berkeleylab/julienne", tag = "3.2.1"}
