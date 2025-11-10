@@ -9,3 +9,18 @@
 .DS_Store
 ~*
 *.swp
+
+# Compiler-generated files
+a.out
+*.exe
+*.mod
+*.smod
+*.sub
+*.a
+*.so
+*.o
+*.dylib
+*.dll
+
+# Ford-generated documentation folder
+doc/html
