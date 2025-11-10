@@ -123,4 +123,8 @@ With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `f
 |NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
 
 **Caveat:** In the case of LLVM 19-20, the above commands succeed for testing band_distribution's Julienne dependency.
-An future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
+A future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
+
+# Documentation
+With [ford](https://github.com/Fortran-FOSS-Programmers/ford) installed, run `ford ford.md`.
+Then open `doc/html/index.html` in a web browser to see the band_distribution documentation.
