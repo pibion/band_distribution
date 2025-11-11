@@ -5,16 +5,16 @@ module PpqFort
   ! Define pi
   real(c_double), parameter :: pi = acos(-1.0d0)
 
-  contains 
+  contains
    pure function Y(Er, a, b) result(res) bind(c, name="Y")
        !! the ionization yield, using the "standard" CDMS model \(a E_r^b\)
        real(c_double), value :: Er, a, b
        real(c_double) :: res
-       
+
        ! Compute the ionization yield
        res = a * abs(Er)**b
     end function Y
-  
+ 
     pure function F(Er, F0, s) result(res) bind(c, name="F")
       !! Model the Fano factor as a linear function
       real(c_double), value :: Er, F0, s
@@ -27,7 +27,7 @@ module PpqFort
      !! average number of electron-hole pairs for a given Er
      real(c_double), value :: Er, a, b, eps
      real(c_double) :: res
-   
+
      res = Y(Er, a, b) * Er / eps
    end function Nbar
 
@@ -85,7 +85,7 @@ module PpqFort
     PGa = 0.573211975d0
     PGb = 0.169520023d0
     PGd = 279.552394d0
-    
+
     if (Er < 0.0d0) then
       res = 0.0d0
     else
@@ -273,36 +273,38 @@ module PpqFort
       real(c_double), value :: Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
   
       ! Locals
-      real(c_double), allocatable :: er_arr(:)
-      real(c_double) :: minx, maxx, resolution, res, integral
-      integer :: npts, i
+      real(c_double) :: res
+      real(c_double), parameter :: minx = 5E-21_c_double
+      integer :: i
   
-      minx = 5E-21
-      maxx = max(1.1 * max(Ep, Eq), max(Ep, Eq) + 10)
-      if (maxx < 15) then
-        resolution = 0.002d0
-      else
-        resolution = 0.01d0
-      endif
-      npts = int((maxx - minx) / resolution) + 1
-  
+      associate(maxx => max(1.1 * max(Ep, Eq), max(Ep, Eq) + 10))
+
+      associate(resolution => merge(0.002_c_double, 0.01d0_c_double, maxx < 15))
+
+      integrate_PpqFullN: &
+      associate(npts => int((maxx - minx) / resolution) + 1)
+
       ! build the array of energies
-      allocate(er_arr(npts))
-      do i = 1, npts
-          er_arr(i) = minx + (i - 1) * resolution
-      end do
-  
-      integral = 0.0d0
-  
+      associate(er_arr => [(minx + (i - 1) * resolution, i = 1, npts)])
+
+      block
+      real(c_double) integral
+#if ! PREFER_DO_CONCURRENT
+      integral = sum([(PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10), i = 1, npts)])
+#else
       ! Optimizable loop
-      ! gfortran may not support this in our Expanse version
-      ! we want the latest llvm-flang (v. 20) compiler
-      ! do concurrent(i = 1:npts) default (none)
-      do concurrent(i = 1:npts) default (none)
+      integral = 0.
+      do concurrent(i = 1:npts) default (none) reduce(+: integral) shared(er_arr, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
           integral = integral + PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
       end do
-  
+#endif
       res = integral * resolution
+      end block
+      end associate
+      end associate integrate_PpqFullN
+      end associate
+      end associate
+  
   end function PpqN
 
   pure function PpqG(Ep, Eq, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG")
