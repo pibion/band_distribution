@@ -10,15 +10,18 @@ With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `f
 
 |Vendor| Version(s)      |  Build/Test Command                                          |
 |------|-----------------|--------------------------------------------------------------|
-|GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4"` |
-|      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
+|GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4"` |
+|      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
 |Intel | 2025.2.1        | `FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release` |
-|LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag -O3` |
-|      | 19              | `fpm test --compiler flang-new --profile release --flag "-O3 -mmlir -allow-assumed-rank"` |
+|LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag "-cpp -O3"` |
+|      | 19              | `fpm test --compiler flang-new --profile release --flag "-cpp -O3 -mmlir -allow-assumed-rank"` |
 |NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
 
 **Caveat:** In the case of LLVM 19-20, the above commands succeed for testing band_distribution's Julienne dependency.
 A future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
+
+### Preprocessor macros
+* Add `-DPREFER_DO_CONCURRENT` in the `--flag` argument to switch from array statements or `do` loops to `do concurrent`
 
 # Testing the python calls
 This code builds a library that may be called within python (this is the original intent of the code).  To test the python calls, run
