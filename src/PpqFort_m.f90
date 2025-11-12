@@ -3,7 +3,7 @@ module PpqFort
   implicit none
 
   ! Define pi
-  real(c_double), parameter :: pi = acos(-1.0d0)
+  real(c_double), parameter :: pi = 3.14159265358979323846_c_double
 
   contains
    pure function Y(Er, a, b) result(res) bind(c, name="Y")
