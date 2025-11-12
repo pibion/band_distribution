@@ -3,7 +3,7 @@ module PpqFort_test_m
   use julienne_m, only : &
      test_t, test_description_t, test_diagnosis_t, test_result_t &
     ,operator(.approximates.), operator(.within.), operator(.all.), operator(//)
-  use PpqFort, only :  PpqG_vector, PpqN_vector
+  use PpqFort_m, only :  PpqG_vector, PpqN_vector
   implicit none
 
   type, extends(test_t) :: PpqFort_test_t

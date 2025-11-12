@@ -1,11 +1,29 @@
-module PpqFort
-  use iso_c_binding
+module PpqFort_m
+  !! TODO: Add comment for FORD describing the module's purpose
+  use iso_c_binding, only : c_double, c_int
   implicit none
+
+  interface
+
+    pure module function PpqN(Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN")
+      !! TODO: Add comment for FORD describing the function's purpose
+      real(c_double), value :: Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
+      real(c_double) :: res
+    end function PpqN
+
+    ! TODO: 
+    ! 1. Add interface bodies here for each procedure below.
+    ! 2. Be sure to add the "module" keyword as shown in the PpqN interface body above.
+    ! 3. Move the procedure definitions to the submodule.
+
+  end interface
 
   ! Define pi
   real(c_double), parameter :: pi = 3.14159265358979323846_c_double
+    ! TODO: move the pi definition to just above the submodule's "contains" statement
 
-  contains
+contains ! TODO: remove this contains statement after all procedure definitions have been moved to the submodule
+
    pure function Y(Er, a, b) result(res) bind(c, name="Y")
        !! the ionization yield, using the "standard" CDMS model \(a E_r^b\)
        real(c_double), value :: Er, a, b
@@ -268,39 +286,6 @@ module PpqFort
     end if
   end function PpqFullG
 
-  pure function PpqN(Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN")
-      ! Inputs
-      real(c_double), value :: Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
-  
-      ! Locals
-      real(c_double) :: res
-      real(c_double), parameter :: minx = 5E-21_c_double
-      integer :: i
-  
-      associate(maxx => max(1.1 * max(Ep, Eq), max(Ep, Eq) + 10))
-        associate(resolution => merge(0.002_c_double, 0.01d0_c_double, maxx < 15))
-          integrate_PpqFullN: &
-          associate(npts => int((maxx - minx) / resolution) + 1)
-            define_recoil_energies: &
-            associate(er_arr => [(minx + (i - 1) * resolution, i = 1, npts)])
-               block
-               real(c_double) integral
-#if ! PREFER_DO_CONCURRENT
-                 integral = sum([(PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10), i = 1, npts)])
-#else
-                 integral = 0.
-                 do concurrent(i = 1:npts) default (none) reduce(+: integral) shared(er_arr, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
-                     integral = integral + PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
-                 end do
-#endif    
-                 res = integral * resolution
-               end block
-            end associate define_recoil_energies
-          end associate integrate_PpqFullN
-        end associate
-      end associate
-  end function PpqN
-
   pure function PpqG(Ep, Eq, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG")
       ! Inputs
       real(c_double), value :: Ep, Eq, F0, s, eps, V, p0, p10, q0, q10
@@ -371,5 +356,4 @@ module PpqFort
   
   end subroutine PpqG_vector
 
-end module
-
+end module PpqFort_m
