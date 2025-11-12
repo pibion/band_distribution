@@ -23,6 +23,12 @@ A future pull request could test band_distribution itself with LLVM 19-20 via Gi
 ### Preprocessor macros
 * Add `-DPREFER_DO_CONCURRENT` in the `--flag` argument to switch from array statements or `do` loops to `do concurrent`
 
+### Experimental parallelization
+To multithread `do concurrent` on CPUs with LLVM `flang` 21 or later, try the following:
+```
+fpm test --compiler flang-new --profile release --flag "-O3 -cpp -DPREFER_DO_CONCURRENT -fopenmp -fdo-concurrent-to-openmp=host"
+```
+
 # Testing the python calls
 This code builds a library that may be called within python (this is the original intent of the code).  To test the python calls, run
 
