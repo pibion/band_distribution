@@ -3,7 +3,7 @@ FROM nixos/nix
 
 RUN nix-channel --update
 
-RUN nix-env -iA nixpkgs.gfortran15 nixpkgs.python312
+RUN nix-env -iA nixpkgs.gfortran15 nixpkgs.python314
 
 # Set up working directory
 WORKDIR /app
