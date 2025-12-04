@@ -1,5 +1,5 @@
-# Use Ubuntu 22.04 as base image
-FROM ubuntu:22.04
+# Use Ubuntu 24.04 as base image
+FROM ubuntu:24.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -13,7 +13,13 @@ RUN apt-get update && apt-get install -y \
     git \
     nano \
     gfortran \
-    && apt-get clean \
+    software-properties-common
+
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test -y \
+    && apt-get update \
+    && apt-get install -y gfortran-14  
+
+RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Set up working directory
@@ -63,6 +69,6 @@ COPY python /app/python/
 COPY *.py /app
 
 # Now compile the fortran code
-#RUN fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4" \
+#RUN fpm test --compiler gfortran-14 --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4" \
 #    && fpm install --prefix=.
 

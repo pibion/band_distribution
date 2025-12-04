@@ -1,0 +1,58 @@
+# Nix builder
+FROM nixos/nix
+
+RUN nix-channel --update
+
+RUN nix-env -iA nixpkgs.gfortran15 nixpkgs.python312
+
+# Set up working directory
+WORKDIR /app
+
+# Install fpm from source
+# There is an fpm-fortran nix package but it's version 0.11.0
+RUN git clone https://github.com/fortran-lang/fpm
+RUN cd fpm \
+    && ./install.sh
+
+RUN echo "alias fpm=~/.local/bin/fpm" >> ~/.bash_profile
+RUN echo "alias fpm=~/.local/bin/fpm" >> ~/.bashrc
+
+# Copy environment.yaml file
+COPY requirements.txt .
+
+# Build the python environment
+RUN python -m venv .venv
+
+# activate the environment within .bashrc
+# this isn't very nix-like
+# but it works so
+RUN echo "source /app/.venv/bin/activate" >> ~/.bash_profile
+RUN echo "source /app/.venv/bin/activate" >> ~/.bashrc
+
+# Source - https://stackoverflow.com/a/39777387
+# Posted by Ahmad Abdelghany, modified by community. See post 'Timeline' for change history
+# Retrieved 2025-11-09, License - CC BY-SA 4.0
+# this command, together with activating the virtualenv in .bash_profile, means we have
+# enabled pip (and the installed environment)
+SHELL ["/root/.nix-profile/bin/bash", "--login", "-c"] 
+
+RUN pip install -r requirements.txt
+
+# Copy the fortran code over
+# first we build the expected directory structure
+# and then we copy files
+RUN mkdir /app/src
+RUN mkdir /app/test
+
+COPY src /app/src/
+COPY test /app/test
+COPY fpm.toml /app/
+
+# also copy over the python functions for testing
+RUN mkdir /app/python
+COPY python /app/python/
+COPY *.py /app
+
+# Now compile the fortran code
+#RUN fpm test --compiler gfortran-14 --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4" \
+#    && fpm install --prefix=.
