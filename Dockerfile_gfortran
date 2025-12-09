@@ -20,8 +20,17 @@ RUN echo "alias fpm=~/.local/bin/fpm" >> ~/.bashrc
 # Copy nix shell file
 COPY shell.nix .
 
+<<<<<<< HEAD
 # Build the python environment defined in shell.nix
 RUN nix-shell
+=======
+# Source - https://stackoverflow.com/a/39777387
+# Posted by Ahmad Abdelghany, modified by community. See post 'Timeline' for change history
+# Retrieved 2025-11-09, License - CC BY-SA 4.0
+# this command, together with activating the virtualenv in .bash_profile, means we have
+# enabled pip (and the installed environment)
+SHELL ["/root/.nix-profile/bin/bash", "--login", "-c"] 
+>>>>>>> 563d5e1 (chore(Dockerfile_gfortran): change python enviornment installation to shell.nix)
 
 # Copy the fortran code over
 # first we build the expected directory structure
