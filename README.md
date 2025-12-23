@@ -8,14 +8,14 @@ This project uses the Fortran Package Manager (fpm).  You'll need to install tha
 The commands below should work with `fpm` 0.12.0 and with the compiler versions shown.
 With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `flang`.
 
-|Vendor| Version(s)      |  Build/Test Command                                          |
-|------|-----------------|--------------------------------------------------------------|
-|GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4"` |
+|Vendor| Version(s)      |  Build/Test Command                                                                                                                      |
+|------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------|
+|GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4"`                         |
 |      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
-|Intel | 2025.2.1        | `FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release` |
-|LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag "-cpp -O3"` |
-|      | 19              | `fpm test --compiler flang-new --profile release --flag "-cpp -O3 -mmlir -allow-assumed-rank"` |
-|NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`               |
+|Intel | 2025.2.1        | `FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release`                                          |
+|LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag "-cpp -O3"`                                                                      | 
+|      | 19              | `fpm test --compiler flang-new --profile release --flag "-cpp -O3 -mmlir -allow-assumed-rank"`                                           |
+|NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`                                                                                           |
 
 **Caveat:** In the case of LLVM 19-20, the above commands succeed for testing band_distribution's Julienne dependency.
 A future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
@@ -47,47 +47,46 @@ There are multiple Dockerfiles, each building the code with a compiler from a di
 
 |Vendor| Dockerfile name     |
 |------|---------------------|
-|GNU   | Dockerfile          | 
+|GNU   | Dockerfile_gfortran | 
 |Intel | Dockerfile_intel    | 
 |LLVM  | Dockerfile_llvm     |
 
-Choose which compiler you want, determine the name of the dockerfile, and then issue the following command in the `fortran-python` directory:
+Choose which compiler you want, determine the name of the dockerfile, and then issue the following command:
 
 ```
-docker build -f {dockerfile name} -t fano_fort .
+docker build -f {dockerfile name} -t band .
 ```
 
 If you need to troubleshoot the docker build, you can shell into this container with the command
 
 ```
-docker run -it --entrypoint /bin/bash fano_fort
+docker run -it --entrypoint /bin/bash band
 ```
 
-Now you have a docker container that contains the fortran binary, but this is not usable on HPC systems.  Run this command to create `fano_fort.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
+Now you have a docker container that contains the fortran binary, but this is not usable on HPC systems.  Run this command to create `band.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
 
 ```
-apptainer build fano_fort.sif docker-daemon://fano_fort:latest
+apptainer build band.sif docker-daemon://band:latest
 ```
 
 # Use the docker container for local development
 For local development, you most likely want the files available to you in a way that persists once you close the container.  In this case you need to supply arguments to `docker run` that mount the top-level directory:
 
 ```
-docker run -it --mount type=bind,src=.,dst=/app --entrypoint=/bin/bash fano_fort
+docker run -it --mount type=bind,src=.,dst=/app --entrypoint=/bin/bash band
 ```
 
 # Build the docker container for running Jupyter and interacting with notebooks
-You should issue the following command in the `fortran-python` directory:
 
 ```
-docker build --rm -f Dockerfile_jupyter -t fano_jupyter .
+docker build --rm -f Dockerfile_jupyter -t band_jupyter .
 ```
 
 # Run the jupyter container
-You can issue this command from any directory.  Note the absolute path names for mounting the volume.  This enables your work to persist!  You will need to replace `/mnt/c/Users/canto/Repositories/nrFanoII` with the path to your repository directory.  You should leave `home/jovyan/work/nrFano` the same.
+You can issue this command from any directory.  Note the absolute path names for mounting the volume.  This enables your work to persist!  You will need to replace `/mnt/c/Users/canto/Repositories/nrFanoII` with the path to your repository directory.  You should leave `home/jovyan/work/nrFano` the same.  Note that this command refers to the nrFanoII repository, which uses this (band_distribution) repository.
 
 ```
-docker run -it --rm -p 8888:8888 -v /mnt/c/Users/canto/Repositories/nrFanoII:/home/jovyan/work/nrFano fano_jupyter:latest
+docker run -it --rm -p 8888:8888 -v /mnt/c/Users/canto/Repositories/nrFanoII:/home/jovyan/work/nrFano band_jupyter:latest
 ```
 
 # Profiling with TAU
