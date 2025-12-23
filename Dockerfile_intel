@@ -65,3 +65,7 @@ COPY *.py /app
 # Now compile the fortran code
 RUN FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release \
     && FOR_COARRAY_NUM_IMAGES=1 fpm install --compiler ifx --flag "-fpp -O3 -coarray" --profile release --prefix .
+
+
+# Needed to find the appropriate .so files from within python
+ENV LD_LIBRARY_PATH=/app/lib:${LD_LIBRARY_PATH}
