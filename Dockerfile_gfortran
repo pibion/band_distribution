@@ -20,12 +20,8 @@ RUN echo "alias fpm=~/.local/bin/fpm" >> ~/.bashrc
 # Copy nix shell file
 COPY shell.nix .
 
-# Source - https://stackoverflow.com/a/39777387
-# Posted by Ahmad Abdelghany, modified by community. See post 'Timeline' for change history
-# Retrieved 2025-11-09, License - CC BY-SA 4.0
-# this command, together with activating the virtualenv in .bash_profile, means we have
-# enabled pip (and the installed environment)
-SHELL ["/root/.nix-profile/bin/bash", "--login", "-c"] 
+# Build the python environment defined in shell.nix
+RUN nix-shell
 
 # Copy the fortran code over
 # first we build the expected directory structure
@@ -45,3 +41,10 @@ COPY *.py /app
 # Now compile the fortran code
 RUN ~/.local/bin/fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
 RUN ~/.local/bin/fpm install --prefix=. --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
+
+# Needed to find the appropriate .so files from within python
+ENV LD_LIBRARY_PATH=/app/lib
+
+# Always want to be in the python environment we build with shell.nix
+# Idea from https://ropensci.r-universe.dev/articles/rix/z-advanced-topic-using-nix-inside-docker.html
+CMD ["nix-shell"]
