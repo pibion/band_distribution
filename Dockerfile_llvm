@@ -65,3 +65,5 @@ COPY *.py /app
 RUN fpm test --compiler flang-new --profile release --flag -O3 \
     && fpm install --prefix=.  --compiler flang-new --profile release --flag -O3
 
+# Needed to find the appropriate .so files from within python
+ENV LD_LIBRARY_PATH=/app/lib:$LD_LIBRARY_PATH
