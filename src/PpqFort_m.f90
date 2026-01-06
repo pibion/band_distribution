@@ -5,17 +5,34 @@ module PpqFort_m
 
   interface
 
+    pure module subroutine PpqN_vector(Ep_arr, Eq_arr, n, a, b, F0, s, eps, V, p0, p10, q0, q10, res_arr) bind(c, name="PpqN_vector")
+      !! TODO: Add comment for FORD describing the function's purpose      
+      integer(c_int), value :: n
+      real(c_double), intent(in) :: Ep_arr(n), Eq_arr(n)
+      real(c_double), value :: a, b, F0, s, eps, V, p0, p10, q0, q10
+      real(c_double), intent(out) :: res_arr(n)
+    end subroutine PpqN_vector
+
+    pure module subroutine PpqG_vector(Ep_arr, Eq_arr, n, F0, s, eps, V, p0, p10, q0, q10, res_arr) bind(c, name="PpqG_vector")
+      !! TODO: Add comment for FORD describing the function's purpose
+      integer(c_int), value :: n
+      real(c_double), intent(in) :: Ep_arr(n), Eq_arr(n)
+      real(c_double), value :: F0, s, eps, V, p0, p10, q0, q10
+      real(c_double), intent(out) :: res_arr(n)
+    end subroutine PpqG_vector
+
     pure module function PpqN(Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN")
       !! TODO: Add comment for FORD describing the function's purpose
       real(c_double), value :: Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
       real(c_double) :: res
     end function PpqN
 
-    ! TODO: 
-    ! 1. Add interface bodies here for each procedure below.
-    ! 2. Be sure to add the "module" keyword as shown in the PpqN interface body above.
-    ! 3. Move the procedure definitions to the submodule.
-
+    pure module function PpqG(Ep, Eq, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG")
+      !! TODO: Add comment for FORD describing the function's purpose 
+      real(c_double), value :: Ep, Eq, F0, s, eps, V, p0, p10, q0, q10
+      real(c_double) :: res
+    end function PpqG
+    
   end interface
 
   ! Define pi
@@ -285,75 +302,5 @@ contains ! TODO: remove this contains statement after all procedure definitions 
       res = 0
     end if
   end function PpqFullG
-
-  pure function PpqG(Ep, Eq, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG")
-      ! Inputs
-      real(c_double), value :: Ep, Eq, F0, s, eps, V, p0, p10, q0, q10
-  
-      ! Locals
-      real(c_double), allocatable :: er_arr(:)
-      real(c_double) :: minx, maxx, resolution, res, integral
-      integer :: npts, i
-  
-      minx = 5E-21
-      maxx = max(1.1 * max(Ep, Eq), max(Ep, Eq) + 10) 
-      if (maxx < 15) then
-        resolution = 0.002d0
-      else
-        resolution = 0.01d0
-      endif
-      npts = int((maxx - minx) / resolution) + 1
-  
-      ! build the array of energies
-      allocate(er_arr(npts))
-      do i = 1, npts
-          er_arr(i) = minx + (i - 1) * resolution
-      end do
-  
-      integral = 0.0d0
-  
-      ! Optimizable loop
-      do concurrent(i = 1:npts)
-          integral = integral + PpqFullG(er_arr(i), Ep, Eq, F0, s, eps, V, p0, p10, q0, q10)
-      end do
-  
-      res = integral * resolution
-  end function PpqG
-
-  subroutine PpqN_vector(Ep_arr, Eq_arr, n, a, b, F0, s, eps, V, p0, p10, q0, q10, res_arr) bind(c, name="PpqN_vector")
-    ! Inputs
-      integer(c_int), value :: n
-      real(c_double), intent(in) :: Ep_arr(n), Eq_arr(n)
-      real(c_double), value :: a, b, F0, s, eps, V, p0, p10, q0, q10
-  
-      ! Output
-      real(c_double), intent(out) :: res_arr(n)
-  
-      ! Locals
-      integer :: i
-  
-      do concurrent(i = 1:n)
-          res_arr(i) = PpqN(Ep_arr(i), Eq_arr(i), a, b, F0, s, eps, V, p0, p10, q0, q10)
-      end do
-  
-  end subroutine PpqN_vector
-
-    subroutine PpqG_vector(Ep_arr, Eq_arr, n, F0, s, eps, V, p0, p10, q0, q10, res_arr) bind(c, name="PpqG_vector")
-    ! Inputs
-      integer(c_int), value :: n
-      real(c_double), intent(in) :: Ep_arr(n), Eq_arr(n)
-      real(c_double), value :: F0, s, eps, V, p0, p10, q0, q10
-  
-      ! Output
-      real(c_double), intent(out) :: res_arr(n)
-  
-      ! Locals
-      integer :: i
-  
-      do concurrent(i = 1:n)
-          res_arr(i) = PpqG(Ep_arr(i), Eq_arr(i), F0, s, eps, V, p0, p10, q0, q10)
-      end do
-  
-  end subroutine PpqG_vector
 
 end module PpqFort_m
