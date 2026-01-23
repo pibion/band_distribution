@@ -6,7 +6,7 @@ contains
   module procedure PpqN_vector
       integer :: i
   
-      do concurrent(i = 1:n)
+      do concurrent(i = 1:n) default (none) shared(res_arr, Ep_arr, Eq_arr, a, b, F0, s, eps, V, p0, p10, q0, q10)
           res_arr(i) = PpqN(Ep_arr(i), Eq_arr(i), a, b, F0, s, eps, V, p0, p10, q0, q10)
       end do
   end procedure PpqN_vector
@@ -14,7 +14,7 @@ contains
   module procedure PpqG_vector
       integer :: i
   
-      do concurrent(i = 1:n)
+      do concurrent(i = 1:n) default (none) shared(res_arr, Ep_arr, Eq_arr, F0, s, eps, V, p0, p10, q0, q10)
           res_arr(i) = PpqG(Ep_arr(i), Eq_arr(i), F0, s, eps, V, p0, p10, q0, q10)
       end do
   end procedure PpqG_vector
@@ -68,7 +68,7 @@ contains
       integral = 0.0d0
   
       ! Optimizable loop
-      do concurrent(i = 1:npts)
+      do concurrent(i = 1:npts) default (none) reduce(+: integral) shared(er_arr, Ep, Eq, F0, s, eps, V, p0, p10, q0, q10)
           integral = integral + PpqFullG(er_arr(i), Ep, Eq, F0, s, eps, V, p0, p10, q0, q10)
       end do
   
