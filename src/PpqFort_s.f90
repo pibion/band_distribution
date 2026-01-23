@@ -30,13 +30,13 @@ contains
           associate(npts => int((maxx - minx) / resolution) + 1)
             define_recoil_energies: &
             associate(er_arr => [(minx + (i - 1) * resolution, i = 1, npts)])
-#if ! PREFER_DO_CONCURRENT
-               integral = sum([(PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10), i = 1, npts)])
+#if ! CANNOT_DO_CONCURRENT
+              integral = 0.
+              do concurrent(i = 1:npts) default (none) reduce(+: integral) shared(er_arr, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
+                  integral = integral + PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
+              end do
 #else
-               integral = 0.
-               do concurrent(i = 1:npts) default (none) reduce(+: integral) shared(er_arr, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
-                   integral = integral + PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10)
-               end do
+              integral = sum([(PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10), i = 1, npts)])
 #endif    
                res = integral * resolution
             end associate define_recoil_energies
