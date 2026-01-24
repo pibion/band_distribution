@@ -12,7 +12,7 @@ With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `f
 |------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------|
 |GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4"`                         |
 |      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
-|Intel | 2025.2.1        | `FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release`                                          |
+|Intel | 2025.2.1        | `fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release`                                          |
 |LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag "-cpp -O3"`                                                                      | 
 |      | 19              | `fpm test --compiler flang-new --profile release --flag "-cpp -O3 -mmlir -allow-assumed-rank"`                                           |
 |NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`                                                                                           |
@@ -21,12 +21,12 @@ With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `f
 A future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
 
 ### Preprocessor macros
-* Add `-DPREFER_DO_CONCURRENT` in the `--flag` argument to switch from array statements or `do` loops to `do concurrent`
+* Add `-DCANNOT_DO_CONCURRENT=1` in the `--flag` argument to turn off `do concurrent` code if you have a compiler that does not implement this feature.
 
 ### Experimental parallelization
 To multithread `do concurrent` on CPUs with LLVM `flang` 21 or later, try the following:
 ```
-fpm test --compiler flang-new --profile release --flag "-O3 -cpp -DPREFER_DO_CONCURRENT -fopenmp -fdo-concurrent-to-openmp=host"
+fpm test --compiler flang-new --profile release --flag "-O3 -cpp -fopenmp -fdo-concurrent-to-openmp=host"
 ```
 
 # Testing the python calls
