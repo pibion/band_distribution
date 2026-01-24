@@ -63,8 +63,8 @@ COPY python /app/python/
 COPY *.py /app
 
 # Now compile the fortran code
-RUN FOR_COARRAY_NUM_IMAGES=1 fpm test --compiler ifx --flag "-fpp -O3 -coarray" --profile release \
-    && FOR_COARRAY_NUM_IMAGES=1 fpm install --compiler ifx --flag "-fpp -O3 -coarray" --profile release --prefix .
+RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
 
 
 # Needed to find the appropriate .so files from within python
