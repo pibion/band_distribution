@@ -63,7 +63,7 @@ contains
     real(c_double) resG(size(Eq_arr))
 
     call PpqG_vector(Ep_arr, Eq_arr, ni, F0, s, eps, V, p0, p10, q0, q10, resG)
-    test_diagnosis =  .all. ( resG .approximates. expected_resG .within. tolerance)  // ' (PpqN)'
+    test_diagnosis =  .all. ( resG .approximates. expected_resG .within. tolerance)  // ' (PpqG)'
   end function
 
 end module PpqFort_test_m
