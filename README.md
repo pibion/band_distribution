@@ -145,6 +145,45 @@ Run the instrumented binary directly (no `tau_exec` needed with compiler instrum
 
 Running the code will produce `profile.*` files in the current directory (`/tmp` if you followed the steps above), which you can investigate using `pprof` (terminal summary) or `paraprof` (GUI view).
 
+## Re-profiling after a source change
+
+If you edit source files in `/repo` and want to re-profile, rebuild the library from `/repo` first, then recompile the profile driver against the new library.
+
+**Step 1: Rebuild the library**
+```
+cd /repo
+fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix /tmp/band_new
+```
+
+**Step 2: Add the dependency libraries to `LD_LIBRARY_PATH`**
+
+`fpm install` copies the main library but not its dependencies (`libassert.so`, `libjulienne.so`). Point the linker at the fpm build directory:
+```
+export LD_LIBRARY_PATH=$(find /repo/build -name "libassert.so" -printf "%h\n" | head -1):$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$(find /repo/build -name "libjulienne.so" -printf "%h\n" | head -1):$LD_LIBRARY_PATH
+```
+
+**Step 3: Recompile the profile driver with TAU instrumentation**
+```
+cd /tmp
+
+tau_f90.sh -O3 -g -qopenmp -fpp -I/tmp/band_new/include -c /repo/src/PpqFort_m.f90
+tau_f90.sh -O3 -g -qopenmp -fpp -I/tmp/band_new/include -c /repo/src/PpqFort_s.f90
+
+tau_f90.sh -O3 -g -qopenmp -fpp \
+    -I/tmp/band_new/include \
+    PpqFort_m.o PpqFort_s.o /repo/app/profile_driver.f90 \
+    -L/tmp/band_new/lib -lband_distribution \
+    -Wl,-rpath,/tmp/band_new/lib \
+    -o /repo/profile_driver
+```
+
+**Step 4: Run and inspect**
+```
+/repo/profile_driver
+pprof
+```
+
 # Documentation
 With [ford](https://github.com/Fortran-FOSS-Programmers/ford) installed, run `ford ford.md`.
 Then open `doc/html/index.html` in a web browser to see the band_distribution documentation.
