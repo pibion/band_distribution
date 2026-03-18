@@ -90,20 +90,20 @@ docker run -it --rm -p 8888:8888 -v /mnt/c/Users/canto/Repositories/nrFanoII:/ho
 ```
 
 # Profiling with TAU
-I ran into trouble installing TAU, so I recommend using Docker. I use the container created by E4S (https://e4s.io/):
+TAU is built into `Dockerfile_tau_intel`. Build that image first:
 
 ```
-docker pull ecpe4s/e4s-cpu:latest
+docker build -f Dockerfile_tau_intel -t tau_intel .
 ```
 
-Once the dockerfile is pulled, you can run the container and shell into it with
+Once the image is built, you can run the container and shell into it with. The repository is mounted at `/repo` so that any changes to files persist on the host. The built library remains at `/app`.
 
 ```
 # for fish shell
-docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -v "$XAUTH/.Xauthority:/root/.Xauthority" -v $PWD:/app ecpe4s/e4s-cpu:latest
+docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -v "$XAUTH/.Xauthority:/root/.Xauthority" -v $PWD:/repo tau_intel /bin/bash
 
 # for bash shell
-docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -v "$XAUTH/.Xauthority:/root/.Xauthority" -v ($pwd):/app ecpe4s/e4s-cpu:latest
+docker run -it -v /tmp/.X11-unix:/tmp/.X11-unix -v "$XAUTH/.Xauthority:/root/.Xauthority" -v ($pwd):/repo tau_intel /bin/bash
 ```
 
 Inside the docker prompt, you'll need to set the DISPLAY environment variable.  After this, tools that require a GUI window like `paraprof` will work.
@@ -112,44 +112,38 @@ Inside the docker prompt, you'll need to set the DISPLAY environment variable.  
 export DISPLAY=:0.0
 ```
 
-And you'll need to move into the mounted directory that contains the fortran files:
+Set the TAU environment variables:
 
 ```
-# this command assumes you're in the root directory
-cd app
-```
-
-E4S currently uses an older (pre-13) version of gcc, so for the gfortran compiler to work we'll have to set `FCFLAGS`:
-
-```
- FCFLAGS+=/usr/lib/gcc/x86_64-linux-gnu/11/
-```
-
-Now we can check that the code compiles normally:
-
-```
-gfortran -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
-```
-
-And now we can try to instrument with TAU:
-
-```
-rm test_ppq
-export TAU_MAKEFILE=/spack/opt/spack/linux-ubuntu22.04-x86_64_v3/gcc-11.4.0/tau-2.34.1-qruklusqgoww5pzgc4f2ffcpybmkbzpy/lib/Makefile.tau-papi-ompt-mpi-pthread-python-pdt-openmp
+export TAU_MAKEFILE=/packages/tau2/x86_64/lib/Makefile.tau-pthread
 export TAU_OPTIONS="-optCompInst -optVerbose -optNoRevert"
 export TAU_THROTTLE=0
-tau_f90.sh -O2 PpqFort.f90 test_ppq.f90 -o test_ppq
 ```
 
-And then run the instrumented code with 
+Compile the profiling driver using `tau_f90.sh`, which instruments every Fortran source file.
+The module and submodule must be compiled before the driver (the `-c` step generates the `.mod` files needed downstream):
 
 ```
-mpirun -np 1 ./test_ppq
+cd /tmp
+
+tau_f90.sh -O3 -g -qopenmp -fpp -I/app/include -c /app/src/PpqFort_m.f90
+tau_f90.sh -O3 -g -qopenmp -fpp -I/app/include -c /app/src/PpqFort_s.f90
+
+tau_f90.sh -O3 -g -qopenmp -fpp \
+    -I/app/include \
+    PpqFort_m.o PpqFort_s.o /repo/app/profile_driver.f90 \
+    -L/app/lib -lband_distribution \
+    -Wl,-rpath,/app/lib \
+    -o /repo/profile_driver
 ```
 
-In other circumstances you'd just run `./test_ppq` but in this case that doesn't work because TAU was compiled with MPI support and this is a non-MPI application.
+Run the instrumented binary directly (no `tau_exec` needed with compiler instrumentation):
 
-Running the code will produce a file `profile.0.0.0` in the `/app` directory which you can investigate using `pprof` (terminal summary) or `paraprof` (GUI view).
+```
+/repo/profile_driver
+```
+
+Running the code will produce `profile.*` files in the current directory (`/tmp` if you followed the steps above), which you can investigate using `pprof` (terminal summary) or `paraprof` (GUI view).
 
 # Documentation
 With [ford](https://github.com/Fortran-FOSS-Programmers/ford) installed, run `ford ford.md`.

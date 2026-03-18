@@ -1,0 +1,99 @@
+# Use Ubuntu 24.04 as base image
+FROM ubuntu:24.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install necessary packages
+# g++/gcc/make/libz-dev/perl are needed to build TAU and its downloaded dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    bzip2 \
+    ca-certificates \
+    curl \
+    git \
+    nano \
+    gfortran \
+    g++ \
+    gcc \
+    make \
+    libz-dev \
+    perl \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working directory for packages
+WORKDIR /packages
+
+# Install Anaconda
+RUN wget https://repo.anaconda.com/archive/Anaconda3-2024.10-1-Linux-x86_64.sh -O /tmp/anaconda.sh \
+    && bash /tmp/anaconda.sh -b -p /opt/anaconda \
+    && rm /tmp/anaconda.sh
+
+# Add Anaconda to PATH
+ENV PATH="/opt/anaconda/bin:${PATH}"
+
+# Initialize conda for bash shell
+RUN echo ". /opt/anaconda/etc/profile.d/conda.sh" >> ~/.bash_profile
+RUN echo ". /opt/anaconda/etc/profile.d/conda.sh" >> ~/.bashrc
+
+# Copy environment.yaml file
+COPY NR_Fano_dan_env.yaml .
+
+# Create conda environment from the yaml file
+# this installs fpm and intel compiler (ifx)
+RUN conda env create -f NR_Fano_dan_env.yaml
+RUN echo "conda activate NR_Fano" >> ~/.bash_profile
+RUN echo "conda activate NR_Fano" >> ~/.bashrc
+
+# Source - https://stackoverflow.com/a/39777387
+# Posted by Ahmad Abdelghany, modified by community. See post 'Timeline' for change history
+# Retrieved 2025-11-09, License - CC BY-SA 4.0
+# this command, together with putting conda activation in .bash_profile, means we have
+# enabled the conda environment for every command
+SHELL ["/bin/bash", "--login", "-c"]
+
+# Check out TAU
+RUN git clone https://github.com/UO-OACISS/tau2.git --depth=1
+
+# Build TAU with Intel Fortran (ifx) and system gcc/g++ for C/C++
+# -pthread to enable pthread support
+# -bfd, -unwind, -dwarf, -otf enable sampling and tracing support
+# Don't specify -mpi to build without MPI
+RUN cd /packages/tau2 \
+    && ./configure -cc=gcc -c++=g++ -fortran=ifx -bfd=download -unwind=download -dwarf=download -otf=download -pthread \
+    && make -j install
+
+# Add TAU binaries to PATH (TAU installs into <arch>/bin under its source tree)
+ENV PATH="/packages/tau2/x86_64/bin:${PATH}"
+
+# TAU's downloaded libelf installs as libelf.so but the dynamic linker looks for libelf.so.1
+RUN ln -s /packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64/libelf.so \
+          /packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64/libelf.so.1
+
+# Make libelf and the Intel math libraries (from the NR_Fano conda env) findable at runtime
+ENV LD_LIBRARY_PATH="/packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64:/opt/anaconda/envs/NR_Fano/lib:${LD_LIBRARY_PATH}"
+
+WORKDIR /app
+
+# Copy the fortran code over
+# first we build the expected directory structure
+# and then we copy files
+RUN mkdir /app/src
+RUN mkdir /app/test
+
+COPY src /app/src/
+COPY test /app/test
+COPY fpm.toml /app/
+
+# also copy over the python functions for testing
+RUN mkdir /app/python
+COPY python /app/python/
+COPY *.py /app
+
+# Now compile the fortran code
+RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
+
+# Needed to find the appropriate .so files from within python
+ENV LD_LIBRARY_PATH=/app/lib:${LD_LIBRARY_PATH}
