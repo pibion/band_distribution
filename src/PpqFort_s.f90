@@ -155,38 +155,25 @@ contains
   end procedure sigq
 
   module procedure PErN
-      real(c_double) PNa, PNb, PNd
-  
-      ! we don't ever change these parameters
-      ! they were determined by fits to Geant output
-      PNa = 0.53693208d0
-      PNb = 6.41515782d0
-      PNd = 23.71789286d0
-  
-      if (Er < 0.0d0) then
-        res = 0.0d0
-      else
-        res = PNa * (1.0d0 / PNb) * exp(-Er / PNb) + &
-              (1.0d0 - PNa) * (1.0d0 / PNd) * exp(-Er / PNd)
-      end if
+      ! determined by fits to Geant output
+      real(c_double), parameter :: PNa = 0.53693208d0
+      real(c_double), parameter :: PNb = 6.41515782d0
+      real(c_double), parameter :: PNd = 23.71789286d0
+      real(c_double), parameter :: PNa_over_PNb   = PNa / PNb
+      real(c_double), parameter :: one_minus_PNa_over_PNd = (1.0d0 - PNa) / PNd
+
+      res = PNa_over_PNb * exp(-Er / PNb) + one_minus_PNa_over_PNd * exp(-Er / PNd)
   end procedure PErN
 
   module procedure PErG
-      real(c_double) :: PGa, PGb, PGd
-  
-      ! Set values for PGa, PGb, and PGd
-      ! we don't ever change these parameters
-      ! they were determined by fits to Geant output
-      PGa = 0.573211975d0
-      PGb = 0.169520023d0
-      PGd = 279.552394d0
-  
-      if (Er < 0.0d0) then
-        res = 0.0d0
-      else
-        res = PGa * (1.0d0 / PGb) * exp(-Er / PGb) + &
-              (1.0d0 - PGa) * (1.0d0 / PGd) * exp(-Er / PGd)
-      end if
+      ! determined by fits to Geant output
+      real(c_double), parameter :: PGa = 0.573211975d0
+      real(c_double), parameter :: PGb = 0.169520023d0
+      real(c_double), parameter :: PGd = 279.552394d0
+      real(c_double), parameter :: PGa_over_PGb   = PGa / PGb
+      real(c_double), parameter :: one_minus_PGa_over_PGd = (1.0d0 - PGa) / PGd
+
+      res = PGa_over_PGb * exp(-Er / PGb) + one_minus_PGa_over_PGd * exp(-Er / PGd)
   end procedure PErG
 
   module procedure aN
