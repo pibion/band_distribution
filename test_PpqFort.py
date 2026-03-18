@@ -106,89 +106,6 @@ print('back in python after running function PErG')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
 
-# Define argument and return types for the function aN
-api.aN.argtypes = [ctypes.c_double] * 11
-api.aN.restype = ctypes.c_double
-
-result_fort = api.aN(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                     ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                     ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                     ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.aN(Er, Ep, Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function aN')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function bN
-api.bN.argtypes = [ctypes.c_double] * 11
-api.bN.restype = ctypes.c_double
-
-result_fort = api.bN(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                     ctypes.c_double(a), ctypes.c_double(b),
-                     ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                     ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                     ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.bN(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function bN')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function cN1
-api.cN1.argtypes = [ctypes.c_double] * 11
-api.cN1.restype = ctypes.c_double
-
-result_fort = api.cN1(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                      ctypes.c_double(a), ctypes.c_double(b),
-                      ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                      ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                      ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.cN(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function cN1')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function cN2
-api.cN2.argtypes = [ctypes.c_double] * 13
-api.cN2.restype = ctypes.c_double
-
-result_fort = api.cN2(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                      ctypes.c_double(a), ctypes.c_double(b),
-                      ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                      ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                      ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.CN(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function cN2')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function PpqExp
-api.PpqExp.argtypes = [ctypes.c_double] * 13
-api.PpqExp.restype = ctypes.c_double
-
-result_fort = api.PpqExp(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                         ctypes.c_double(a), ctypes.c_double(b),
-                         ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                         ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                         ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.PpqExp(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function PpqExp')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function PpqPreExp
-api.PpqPreExp.argtypes = [ctypes.c_double] * 13
-api.PpqPreExp.restype = ctypes.c_double
-
-result_fort = api.PpqPreExp(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                            ctypes.c_double(a), ctypes.c_double(b),
-                            ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                            ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                            ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.PpqPreExp(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function PpqPreExp')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
 # Define argument and return types for the function PpqFullN
 api.PpqFullN.argtypes = [ctypes.c_double] * 13
 api.PpqFullN.restype = ctypes.c_double
@@ -200,19 +117,6 @@ result_fort = api.PpqFullN(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_do
                            ctypes.c_double(q0), ctypes.c_double(q10))
 result_py = ppq.PpqFullN(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
 print('back in python after running function PpqFullN')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function PpqFullG
-api.PpqFullG.argtypes = [ctypes.c_double] * 11
-api.PpqFullG.restype = ctypes.c_double
-
-result_fort = api.PpqFullG(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                           ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
-                           ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
-                           ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.PpqFullG(Er, Ep, Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-print('back in python after running function PpqFullG')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
 

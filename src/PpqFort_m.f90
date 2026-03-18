@@ -75,52 +75,11 @@ module PpqFort_m
     real(c_double) :: res
   end function PErG
 
-  pure module function aN(Er, Ep, Eq, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="aN")
-    real(c_double), value :: Er, Ep, Eq, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function aN
-
-  pure module function bN(Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="bN")
-    ! Input arguments
-    real(c_double), value :: Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function bN
-
-  pure module function cN1(Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="cN1")
-    ! Input arguments
-    real(c_double), value :: Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function cN1
-
-  pure module function cN2(Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="cN2")
-    ! Input arguments
-    real(c_double), value :: Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function cN2
-
-  pure module function PpqExp(Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqExp")
-    ! Input arguments
-    real(c_double), value :: Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function PpqExp
-
-  pure module function PpqPreExp(Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqPreExp")
-    ! Input arguments
-    real(c_double), value :: Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function PpqPreExp
-
   pure module function PpqFullN(Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqFullN")
     ! Input arguments
     real(c_double), value :: Er, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
     real(c_double) :: res
   end function PpqFullN
-
-  pure module function PpqFullG(Er, Ep, Eq, F0, s, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqFullG")
-    ! Input arguments
-    real(c_double), value :: Er, Ep, Eq, F0, s, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function PpqFullG
 
   end interface
 
