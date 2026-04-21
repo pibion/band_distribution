@@ -4,17 +4,22 @@ FROM quay.io/jupyter/base-notebook
 ENV DEBIAN_FRONTEND=noninteractive
 USER root
 
-# Install necessary packages
 RUN apt-get update && apt-get install -y \
-    gfortran \
-    && apt-get clean 
+    git \
+    gcc \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Switch back to jovyan to avoid accidental container runs as root
 USER $NB_UID
 
 # instructions from
 # https://jupyter-docker-stacks.readthedocs.io/en/latest/using/recipes.html#using-mamba-install-recommended-or-pip-install-in-a-child-docker-image
-RUN mamba install --yes 'flake8' && \
+# ifx_linux-64 requires the Intel conda channel; fpm comes from conda-forge
+RUN mamba install --yes \
+    --channel https://software.repos.intel.com/python/conda \
+    --channel conda-forge \
+    ifx_linux-64 fpm && \
     mamba clean --all -f -y && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
@@ -26,8 +31,19 @@ RUN mamba install --yes --file /tmp/requirements.txt && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
 
+WORKDIR /home/${NB_USER}
+
 # Copy the fortran code over
-COPY PpqFort.f90 .
+RUN mkdir src test python
+COPY --chown=${NB_UID}:${NB_GID} src/ src/
+COPY --chown=${NB_UID}:${NB_GID} test/ test/
+COPY --chown=${NB_UID}:${NB_GID} fpm.toml .
+COPY --chown=${NB_UID}:${NB_GID} python/ python/
+COPY --chown=${NB_UID}:${NB_GID} *.py .
+
+# Intel runtime libs (libimf.so etc.) live in the conda lib dir; needed at test-run time
+ENV LD_LIBRARY_PATH=${CONDA_DIR}/lib:/home/jovyan/lib
 
 # Now compile the fortran code
-RUN gfortran -fPIC -shared -O3 -march=native -ffast-math -fopenmp -ftree-parallelize-loops=4 -o PpqFort.so PpqFort.f90
+RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
