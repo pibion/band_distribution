@@ -45,6 +45,8 @@ COPY --chown=${NB_UID}:${NB_GID} *.py .
 
 # Intel runtime libs (libimf.so etc.) live in the conda lib dir; needed at test-run time
 ENV LD_LIBRARY_PATH=${CONDA_DIR}/lib:/home/jovyan/lib
+# Preload Intel OpenMP runtime so __kmpc_* symbols resolve when ctypes loads libband_distribution.so
+ENV LD_PRELOAD=${CONDA_DIR}/lib/libiomp5.so
 
 # Now compile the fortran code
 RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \

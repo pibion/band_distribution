@@ -60,7 +60,7 @@ docker build -f {dockerfile name} -t band .
 If you need to troubleshoot the docker build, you can shell into this container with the command
 
 ```
-docker run -it --entrypoint /bin/bash band
+docker run -it band
 ```
 
 Now you have a docker container that contains the fortran binary, but this is not usable on HPC systems.  Run this command to create `band.sif`, an image file that can be used on HPC systems.  The command can be issued in any location (it is not directory dependent).
