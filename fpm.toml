@@ -4,7 +4,10 @@ name = "band_distribution"
 library = true
 
 [library]
-type = "shared"  
+type = "shared"
+
+[build]
+link = ["iomp5"]
 
 [dependencies]
 julienne = {git = "https://github.com/berkeleylab/julienne", tag = "3.2.1"}
