@@ -510,6 +510,9 @@ def PpqN_safe_inspect(Ep, Eq,
               q0=0.23718488, q10=0.27093151,
               res=0.1,
               log_dir="logs"):
+    if F0 == 0 and s == 0:
+        raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
+
     # find Er_max
     f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
 
@@ -517,9 +520,9 @@ def PpqN_safe_inspect(Ep, Eq,
     # this will only work if your peaks have a width
     # greater than 0.1 keV
     # which seems to be true for all reasonable CDMS parameters
-   # the advantage is that the minimizer sometimes fails and this never does
+    # the advantage is that the minimizer sometimes fails and this never does
     maxx = max(Ep, Eq) + 5
-    er_arr = np.arange(0, maxx, res)
+    er_arr = np.arange(5e-21, maxx, res)
     f_arr = np.zeros(len(er_arr), dtype=np.float64)
     for idx, er in enumerate(er_arr):
         #print (f(er, Ep, Eq), type(f(er, Ep, Eq)))
@@ -726,8 +729,8 @@ def consecutive(data, stepsize=1):
 def gaussian(x, A, mu, sigma):
     return A * np.exp(-((x - mu) ** 2) / (2 * sigma ** 2))
 
-def integrate_g_safe_inspect(g, Ep, Eq, Ermx, resolution): 
-    minx = 0
+def integrate_g_safe_inspect(g, Ep, Eq, Ermx, resolution):
+    minx = 5e-21
     maxx = max(Ep, Eq) + 5
     # print("minx and maxx are ", minx, maxx)
 
@@ -914,6 +917,9 @@ def PpqG_safe_inspect(Ep, Eq,
               q0=0.23718488, q10=0.27093151,
               res=0.1,
               log_dir="logs"):
+    if F0 == 0 and s == 0:
+        raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
+
     # Set parameters for integration
     # with CDMS parameters, peaks are
     # never less than 1 keV wide
@@ -929,7 +935,7 @@ def PpqG_safe_inspect(Ep, Eq,
     # greater than 0.1 keV
     # which seems to be true for all reasonable CDMS parameters
     maxx = max(Ep, Eq) + 5
-    er_arr = np.arange(0, maxx, res)
+    er_arr = np.arange(5e-21, maxx, res)
     f_arr = np.zeros(len(er_arr))
     for idx, er in enumerate(er_arr):
         f_arr[idx] = f(er, Ep, Eq)

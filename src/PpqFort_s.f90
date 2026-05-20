@@ -26,6 +26,9 @@ contains
       real(c_double) :: Er_i, F_val, Nbar_val, aN_val, bN_val, cN1_val, cN2_val
       real(c_double) :: exponent, prefac_i, erffac_i, contrib_i
 
+      if (F0 == 0.0d0 .and. s == 0.0d0) &
+          error stop "Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero"
+
       associate(maxx => max(1.1 * max(Ep, Eq), max(Ep, Eq) + 10))
         associate(resolution => merge(0.002_c_double, 0.01_c_double, maxx < 15))
           integrate_PpqFullN: &
@@ -79,6 +82,9 @@ contains
       real(c_double) :: sigp_val, sigq_val
       real(c_double) :: Er_i, F_val, Nbar_val, aN_val, bN_val, cN1_val, cN2_val
       real(c_double) :: exponent, prefac_i, erffac_i, contrib_i
+
+      if (F0 == 0.0d0 .and. s == 0.0d0) &
+          error stop "Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero"
 
       minx = 5E-21
       maxx = max(1.1 * max(Ep, Eq), max(Ep, Eq) + 10)
