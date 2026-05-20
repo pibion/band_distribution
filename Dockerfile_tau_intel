@@ -90,7 +90,7 @@ COPY fpm.toml /app/
 # also copy over the python functions for testing
 RUN mkdir /app/python
 COPY python /app/python/
-COPY *.py /app
+COPY *.py /app/
 
 # Now compile the fortran code
 RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \

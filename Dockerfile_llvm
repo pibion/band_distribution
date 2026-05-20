@@ -60,7 +60,7 @@ COPY fpm.toml /app/
 # also copy over the python functions for testing
 RUN mkdir /app/python
 COPY python /app/python/
-COPY *.py /app
+COPY *.py /app/
 
 # Now compile the fortran code
 RUN fpm test --compiler flang-new --profile release --flag -O3 \
