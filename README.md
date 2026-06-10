@@ -30,17 +30,30 @@ fpm test --compiler flang-new --profile release --flag "-O3 -cpp -fopenmp -fdo-c
 ```
 
 # Testing the python calls
-This code builds a library that may be called within python (this is the original intent of the code).  To test the python calls, run
+This code builds a library that may be called within python (this is the original intent of the code).  The python test scripts live in `test/python/` and should be run from the repository root.  To test the python calls, run
 
 ```
-python test_PpqFort.py
+LD_LIBRARY_PATH=lib python test/python/test_PpqFort.py
 ```
 
 or if you just want to test the vectorized functions `PpqN_vector` and `PpqG_vector`
 
 ```
-python test_PpqFort_vectorFuncs.py
+LD_LIBRARY_PATH=lib python test/python/test_PpqFort_vectorFuncs.py
 ```
+
+(`LD_LIBRARY_PATH=lib` is needed when running outside the docker containers, which set it in their environment.)
+
+## Chi-square validation tests
+These verify that data sampled from the PDFs produces Pearson chi-square values that follow the theoretical chi2(n_bins − 1) distribution.  Reference plots are committed in `figures/`.
+
+```
+python test/python/verify_sample_from_pdf.py                       # sampler moment checks (~1 min)
+python test/python/test_chisquare_gaussian.py                      # analytic Gaussian PDF (~2 min)
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py      # Fortran PpqN PDF (~1 hr first run)
+```
+
+`test_chisquare_ppqn.py` caches its PDF grid evaluation in `ppqn_vertex_grid.npz` (not committed); the first run takes ~20 minutes to build it, subsequent runs reuse it.  Pass an integer argument to reduce the number of throws for a quick smoke test, e.g. `... test_chisquare_ppqn.py 2000`.
 
 # Build the singularity/apptainer container for HPC submissions
 There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  

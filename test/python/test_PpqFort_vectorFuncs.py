@@ -2,7 +2,7 @@ import numpy as np
 import ctypes
 import os
 
-folderpath = '' 
+folderpath = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if os.name == 'posix': #Linux/Mac
     DLLname = 'lib/libband_distribution.so'
 else:

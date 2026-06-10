@@ -41,7 +41,6 @@ COPY --chown=${NB_UID}:${NB_GID} src/ src/
 COPY --chown=${NB_UID}:${NB_GID} test/ test/
 COPY --chown=${NB_UID}:${NB_GID} fpm.toml .
 COPY --chown=${NB_UID}:${NB_GID} python/ python/
-COPY --chown=${NB_UID}:${NB_GID} *.py .
 
 # Intel runtime libs (libimf.so etc.) live in the conda lib dir; needed at test-run time
 ENV LD_LIBRARY_PATH=${CONDA_DIR}/lib:/home/jovyan/lib

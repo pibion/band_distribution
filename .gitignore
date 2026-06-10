@@ -24,3 +24,12 @@ a.out
 
 # Ford-generated documentation folder
 doc/html
+
+# Python bytecode caches
+__pycache__/
+
+# Regenerable PDF grid caches (keyed to the .so hash; rebuild on demand)
+*.npz
+
+# fpm install output
+bin/
