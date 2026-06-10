@@ -3,15 +3,17 @@ import ctypes
 import sys
 import os
 
+repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # Path to the directory containing PpqDist_v6.py
-module_dir = './python'
+module_dir = os.path.join(repo_root, 'python')
 sys.path.append(module_dir)
 
 # File PpqDist_v6 contains our existing (tested!) python functions
 # For P(Ep, Eq)
 import pq_dist_v6 as ppq
 
-folderpath = '' 
+folderpath = repo_root
 if os.name == 'posix': #Linux/Mac
     DLLname = 'lib/libband_distribution.so'
 else:
