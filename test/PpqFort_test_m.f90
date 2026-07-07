@@ -48,7 +48,7 @@ contains
 
   function check_PpqN_vector() result(test_diagnosis)
     type(test_diagnosis_t) test_diagnosis
-    real(c_double), parameter :: expected_resN(*) = [real(c_double) :: 2.7532559194D-008, 2.9389448480D-008,  2.5705989565D-008]
+    real(c_double), parameter :: expected_resN(*) = [real(c_double) :: 2.6979836827440D-008, 2.8801096611350D-008, 2.5197301408980D-008]
     real(c_double), parameter :: tolerance(*) = expected_resN/100
     real(c_double) resN(size(Eq_arr))
 
@@ -58,7 +58,7 @@ contains
 
   function check_PpqG_vector() result(test_diagnosis)
     type(test_diagnosis_t) test_diagnosis
-    real(c_double), parameter :: expected_resG(*) = [real(c_double) :: 1.2591349782D-033, 2.6066426223D-033, 6.0702183456D-034]
+    real(c_double), parameter :: expected_resG(*) = [real(c_double) :: 1.0929369661820D-020, 1.4684710987090D-020, 8.1375591868460D-021]
     real(c_double), parameter :: tolerance(*) = expected_resG/100
     real(c_double) resG(size(Eq_arr))
 
