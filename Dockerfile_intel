@@ -56,15 +56,19 @@ RUN mkdir /app/test
 
 COPY src /app/src/
 COPY test /app/test
+COPY app /app/app/
 COPY fpm.toml /app/
 
 # also copy over the python functions for testing
 RUN mkdir /app/python
 COPY python /app/python/
 
-# Now compile the fortran code
-RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
-    && fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
+# Build and install (tests run at container start so build doesn't fail on stale expected values)
+RUN fpm build --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release
+
+CMD fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && echo "--- profile_driver output ---" \
+    && fpm run profile_driver --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release
 
 
 # Needed to find the appropriate .so files from within python
