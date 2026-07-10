@@ -55,6 +55,35 @@ LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py      # Fortran Ppq
 
 `test_chisquare_ppqn.py` caches its PDF grid evaluation in `ppqn_vertex_grid.npz` (not committed); the first run takes ~20 minutes to build it, subsequent runs reuse it.  Pass an integer argument to reduce the number of throws for a quick smoke test, e.g. `... test_chisquare_ppqn.py 2000`.
 
+### Physics-simulator validation tests
+The tests above only check that the PDFs are *self-consistent* (samples drawn from a PDF match that same PDF).  The two tests below are the stronger check: they generate events from an independent physics simulator (`python/generate_events.py`, which draws Er from the recoil spectrum, N from a truncated normal, and applies detector resolution) and compare the binned counts against the Fortran PDFs.  A pass means the Fortran `PpqN` / `PpqG` implementations correctly describe the physics.
+
+```
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py [n_throws] [n_bins]   # NR band vs PpqN
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py [n_throws] [n_bins]   # ER band vs PpqG
+```
+
+Both write their chi-square histograms to `figures/chisquare_nr_simulator.png` and `figures/chisquare_er_simulator.png`.  `n_throws` defaults to 1000 and `n_bins` to 400.  The one-time integration of the PDF over the bins dominates the wall time, so reducing `n_bins` is the way to get a fast smoke test:
+
+```
+# smoke test: 100 throws, 64 bins
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 100 64   # ~25 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 100 64   # ~15 min
+
+# full validation: 10,000 throws, 400 bins
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 10000    # ~70 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    # ~120 min
+```
+
+(Timings measured with 18 workers under x86 emulation on an Apple Silicon Mac; native x86 hardware should be faster.)
+
+To run inside the Intel docker container, mount the repository's `figures/` directory so the plot survives the container:
+
+```
+docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
+    bash --login -c "conda activate NR_Fano && python /app/test/python/test_chisquare_nr_simulator.py 100 64"
+```
+
 # Build the singularity/apptainer container for HPC submissions
 There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  
 

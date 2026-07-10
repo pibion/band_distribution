@@ -18,9 +18,20 @@ Observable range
 
 Usage
 -----
-    LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py [n_throws]
+    LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py [n_throws] [n_bins]
 
 n_throws defaults to 1000 for a quick check; use 10000 for a thorough test.
+n_bins defaults to 400; use a smaller value (e.g. 64) for a fast smoke test
+of the wiring, since the one-time bin integration dominates the wall time.
+
+The chi-square histogram is written to figures/chisquare_nr_simulator.png.
+
+Approximate wall times (18 workers, x86 emulation on an Apple Silicon Mac;
+native x86 hardware should be faster):
+
+    n_throws=100,   n_bins=64   ~ 25 min   (smoke test)
+    n_throws=100,   n_bins=400  ~ 30 min
+    n_throws=10000, n_bins=400  ~ 70 min   (full validation)
 """
 
 import os
@@ -71,7 +82,7 @@ EQ_RANGE = (0.5,   100.0)   # keV — charge channel (see module docstring)
 # ---------------------------------------------------------------------------
 N_EVENTS  = 10_000
 N_THROWS  = int(sys.argv[1]) if len(sys.argv) > 1 else 1_000
-N_BINS    = 400
+N_BINS    = int(sys.argv[2]) if len(sys.argv) > 2 else 400
 N_WORKERS = os.cpu_count()
 
 # ---------------------------------------------------------------------------
