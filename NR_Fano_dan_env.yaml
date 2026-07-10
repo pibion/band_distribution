@@ -14,3 +14,7 @@ dependencies:
   - ipykernel
   - matplotlib
   - pandas
+  - pip
+  - pip:
+    - equibin
+    - lintsampler

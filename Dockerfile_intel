@@ -63,13 +63,17 @@ COPY fpm.toml /app/
 RUN mkdir /app/python
 COPY python /app/python/
 
-# Build and install (tests run at container start so build doesn't fail on stale expected values)
-RUN fpm build --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release
+# Build the Fortran library and copy all shared objects to /app/lib so the
+# Python ctypes wrapper can find them via LD_LIBRARY_PATH.
+RUN fpm build --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && mkdir -p /app/lib \
+    && find /app/build -name "*.so" -exec cp {} /app/lib/ \;
+
+# Needed to find the shared objects from within Python
+ENV LD_LIBRARY_PATH=/app/lib:${LD_LIBRARY_PATH}
 
 CMD fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
     && echo "--- profile_driver output ---" \
-    && fpm run profile_driver --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release
-
-
-# Needed to find the appropriate .so files from within python
-ENV LD_LIBRARY_PATH=/app/lib:${LD_LIBRARY_PATH}
+    && fpm run profile_driver --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && echo "--- chi-square smoke test (100 throws) ---" \
+    && python /app/test/python/test_chisquare_nr_simulator.py 100

@@ -47,13 +47,6 @@ def Y(Er,
     #ER should be in keV
     #a=0.16; b=0.18 from previous NRFano paper
     #return a*np.absolute(Er)**0.6
-    if isinstance(Er, (list, tuple, np.ndarray)):
-        print ("Er in Y is an array")
-
-    if isinstance(a*np.absolute(Er)**b, (list, tuple, np.ndarray)):
-        print ("Somehow the yield is evaluating to an array")
-        print ("a, Er, and b are ", a, Er, b)
-
     return a*np.absolute(Er)**b
 
 #define the Fano Factors for ERs and NRs
@@ -71,8 +64,6 @@ def Nbar(Er,
 	  a=0.16,b=0.18,
 	  eps=3e-3):
     
-    if isinstance(Y(Er,a=a,b=b), (list, tuple, np.ndarray)):
-        print ("Y in Nbar is an array")
     return Y(Er,a=a,b=b)*Er/eps
 
 #phonon and ionization resolutions
@@ -135,15 +126,6 @@ def bN(Er,Ep,Eq,
     t2 = eps**2/(2*sigq(Eq,q0=q0,q10=q10)**2)
     t3 = V**2/(2*(sigp(Ep,eps=eps,V=V,p0=p0,p10=p10)*1e3)**2)
 
-    if isinstance(t1, (list, tuple, np.ndarray)):
-        print ("t1 in bN is an array")
-
-    if isinstance(t2, (list, tuple, np.ndarray)):
-        print ("t2 in bN is an array")
-
-    if isinstance(t3, (list, tuple, np.ndarray)):
-        print ("t3 in bN is an array")
-
     return t1+t2+t3
 
 def cN(Er,Ep,Eq,
@@ -180,15 +162,6 @@ def PpqExp(Er,Ep,Eq,
     cN_val = cN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
     aN_val = aN(Er,Ep,Eq,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
     bN_val = bN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-
-    if isinstance(cN_val, (list, tuple, np.ndarray)):
-        print ("cN is returning an array")
-
-    if isinstance(aN_val, (list, tuple, np.ndarray)):
-        print ("aN is returning an array")
-
-    if isinstance(bN_val, (list, tuple, np.ndarray)):
-        print ("bN is returning an array")
 
     exponent = cN_val + (aN_val**2 / (4*bN_val))
     return exponent
@@ -364,7 +337,6 @@ def PpqN_fast4_inspect(Ep, Eq, interpolator,
               tol=1e-6, threshold=1e-20):
     # function call is interpolate(self, ep, eq, q10, F0, a, b, p0, p10, method="nearest"):
     Ermx, width, max_integrand_val = interpolator.interpolate(Ep, Eq, q10, F0, a, b, p0, p10, method="nearest")
-    print ("max integrand value is ", max_integrand_val)
     if max_integrand_val * width * 12 > threshold:
         # only integrate if there's a chance the value
         # is over the user-specificied threshold
@@ -393,13 +365,11 @@ def integrate_g_fast_inspect(g, Ep, Eq, Ermx, width, tol):
     # don't want to include that when getting the max value
     # max(any array that contains a NaN) = NaN
     max_val = max(er_integrand_arr[~np.isnan(er_integrand_arr)])
-    print("max val is ", max_val)
 
     # check that the first value is small enough
     # the outcome of this loop is that minx is set correctly
     # er_integrand_arr[0] is sometimes NaN
     first_val = er_integrand_arr[1]
-    print("first val is ", first_val)
     i = 0
     adjust_bounds_bool = False
     while True:
@@ -976,7 +946,6 @@ def PpqG_fast2b(Ep, Eq,
     if Ermx < 0:
         Ermx=0
         #print ("Error encountered in PpqNfast2a: Ermx is set to zero")
-    print("Max Er for gamma is calculated as ", Ermx)
 
     # Initialize variables
     ans_high = 0
