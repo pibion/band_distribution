@@ -15,10 +15,11 @@ submodule(PpqFort_m) PpqFort_s
   ! integration window reaches down to the low-Er spectrum spike.
   real(c_double), parameter :: PGb_scale = 0.169520023d0
 
-  ! Peak-locator status codes
-  integer, parameter :: PEAK_GAUSSIAN = 0   ! interior peak, sigma from curvature
-  integer, parameter :: PEAK_BOUNDARY = 1   ! integrand decays from Er ~ 0; sigma is a decay length
-  integer, parameter :: PEAK_FAILED   = 2   ! locator failed; integrate the full range
+  ! The Er integrand can be multimodal (typically bimodal, usually
+  ! dominated by the first, sharp peak).  Rather than assume dominance,
+  ! every local maximum of the closed-form log-integrand gets its own
+  ! integration window; overlapping windows are merged.
+  integer, parameter :: max_modes = 4
 
 contains
 
@@ -237,78 +238,119 @@ contains
       H = cN + aN**2 / (4.0d0 * bN) + log(spec)
   end function log_integrand_approx
 
-  ! Locate the peak of the Er integrand and estimate its width.
+  ! Locate every mode of the Er integrand and estimate their widths.
   !
-  ! Seed: Er0 = Ep - (V/1000)*Eq/eps, i.e. measure N from the ionization
-  ! channel and subtract the Luke phonons -- exact at the noiseless band
-  ! centroid for any yield model.  Refine with Newton iterations on the
-  ! closed-form log-integrand; fall back to a coarse scan if Newton
-  ! wanders.  On success sigma_Er = 1/sqrt(-H''); if the integrand is
-  ! monotonically decaying from Er ~ 0 (PEAK_BOUNDARY) sigma_Er is the
-  ! exponential decay length instead.
-  pure subroutine locate_peak(Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma, &
-                              Er_star, sigma_Er, H_star, status)
+  ! An unconditional log-spaced scan of the closed-form log-integrand
+  ! (cheap: no N integral) finds all candidate local maxima -- log
+  ! spacing so the sharp low-Er peak cannot fall between scan points.
+  ! Each candidate is refined with Newton iterations; sigma = 1/sqrt(-H'')
+  ! from the curvature at the refined peak.  A candidate at the low-Er
+  ! boundary with the integrand monotonically decaying away from it is
+  ! kept as a boundary mode whose sigma is the exponential decay length.
+  ! Modes more than ~100 log units below the best one cannot contribute
+  ! and are dropped; near-duplicate refinements are merged.
+  !
+  ! n_modes = 0 signals failure; the caller falls back to the original
+  ! full-range grid.
+  pure subroutine locate_modes(Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma, &
+                               er_m, sig_m, H_m, bnd_m, n_modes)
       real(c_double), intent(in) :: Ep, Eq, a, b, F0, s, eps, V, sp2, sq2
       logical, intent(in) :: is_gamma
-      real(c_double), intent(out) :: Er_star, sigma_Er, H_star
-      integer, intent(out) :: status
+      real(c_double), intent(out) :: er_m(max_modes), sig_m(max_modes), H_m(max_modes)
+      logical, intent(out) :: bnd_m(max_modes)
+      integer, intent(out) :: n_modes
 
       integer, parameter :: n_scan = 512
-      real(c_double) :: maxx_scan, x, d, H1, H2, dx, xk, Hk, Hbest
-      integer :: k, kbest
-      logical :: ok
+      real(c_double), parameter :: x_scan_min = 1.0d-4
+      real(c_double) :: xs(n_scan), Hs(n_scan)
+      real(c_double) :: maxx_scan, dlx, x, d, H1, H2, sig, Hv
+      integer :: k, m, j, ncand, cand(n_scan), best
+      logical :: ok, duplicate
 
+      n_modes = 0
       maxx_scan = max(1.1d0 * max(Ep, Eq), max(Ep, Eq) + 10.0d0)
 
-      ! Newton from the Luke-subtraction seed
-      x = min(max(Ep - (V * 1.0d-3) * (Eq / eps), 1.0d-3), maxx_scan)
-      call newton_refine(x, ok, H1, H2)
+      dlx = (log(maxx_scan) - log(x_scan_min)) / (n_scan - 1)
+      do k = 1, n_scan
+          xs(k) = exp(log(x_scan_min) + (k - 1) * dlx)
+          Hs(k) = log_integrand_approx(xs(k), Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)
+      end do
 
-      if (.not. ok) then
-          ! Coarse scan of the closed-form log-integrand (cheap: no N integral)
-          dx = (maxx_scan - 1.0d-3) / (n_scan - 1)
-          kbest = 1
-          Hbest = -huge(1.0d0)
-          do k = 1, n_scan
-              xk = 1.0d-3 + (k - 1) * dx
-              Hk = log_integrand_approx(xk, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)
-              if (Hk > Hbest) then
-                  Hbest = Hk
-                  kbest = k
-              end if
-          end do
-          if (kbest == 1) then
-              ! Monotonically decaying from the low-Er edge: window by decay length
-              x = 1.0d-3
-              d = 1.0d-4
-              H1 = (log_integrand_approx(x + d, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma) &
-                  - log_integrand_approx(x, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)) / d
-              if (H1 < 0.0d0) then
-                  Er_star  = x
-                  sigma_Er = min(-1.0d0 / H1, maxx_scan)
-                  H_star   = log_integrand_approx(x, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)
-                  status   = PEAK_BOUNDARY
-              else
-                  status = PEAK_FAILED
-              end if
-              return
+      ! Candidate local maxima (including the low-Er boundary)
+      ncand = 0
+      do k = 1, n_scan
+          if (Hs(k) < -1.0d29) cycle
+          if ((k == 1      .or. Hs(k) >= Hs(k - 1)) .and. &
+              (k == n_scan .or. Hs(k) >  Hs(k + 1))) then
+              ncand = ncand + 1
+              cand(ncand) = k
           end if
-          x = 1.0d-3 + (kbest - 1) * dx
+      end do
+      if (ncand == 0) return
+
+      ! Sort candidates by scan height, tallest first (ncand is small)
+      do m = 1, ncand - 1
+          best = m
+          do j = m + 1, ncand
+              if (Hs(cand(j)) > Hs(cand(best))) best = j
+          end do
+          k = cand(m); cand(m) = cand(best); cand(best) = k
+      end do
+
+      refine_candidates: do m = 1, ncand
+          if (n_modes == max_modes) exit
+          ! Anything this far below the tallest mode contributes nothing
+          if (n_modes > 0) then
+              if (Hs(cand(m)) < maxval(H_m(1:n_modes)) - 100.0d0) cycle
+          end if
+
+          k = cand(m)
+          if (k == 1) then
+              ! Boundary mode: integrand decays away from the low-Er edge
+              x = xs(1)
+              d = 1.0d-5
+              H1 = (log_integrand_approx(x + d, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma) &
+                  - Hs(1)) / d
+              if (H1 >= 0.0d0) cycle
+              n_modes = n_modes + 1
+              er_m(n_modes)  = x
+              sig_m(n_modes) = min(-1.0d0 / H1, maxx_scan)
+              H_m(n_modes)   = Hs(1)
+              bnd_m(n_modes) = .true.
+              cycle
+          end if
+
+          x = xs(k)
           call newton_refine(x, ok, H1, H2)
           if (.not. ok) then
-              status = PEAK_FAILED
-              return
+              ! Accept the scan point with finite-difference curvature if usable
+              x = xs(k)
+              d = max(1.0d-5, 1.0d-5 * x)
+              H2 = (log_integrand_approx(x + d, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma) &
+                  - 2.0d0 * Hs(k) &
+                  + log_integrand_approx(x - d, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)) / d**2
+              if (H2 >= 0.0d0) cycle
           end if
-      end if
+          sig = 1.0d0 / sqrt(-H2)
+          Hv  = log_integrand_approx(x, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)
+          if (sig /= sig .or. sig <= 1.0d-6 .or. sig > maxx_scan) cycle
 
-      Er_star  = x
-      sigma_Er = 1.0d0 / sqrt(-H2)
-      H_star   = log_integrand_approx(x, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)
-      if (sigma_Er /= sigma_Er .or. sigma_Er <= 1.0d-6 .or. sigma_Er > maxx_scan) then
-          status = PEAK_FAILED
-      else
-          status = PEAK_GAUSSIAN
-      end if
+          ! Drop refinements that landed on an already-recorded mode
+          duplicate = .false.
+          do j = 1, n_modes
+              if (abs(x - er_m(j)) < 0.5d0 * (sig + sig_m(j))) then
+                  duplicate = .true.
+                  exit
+              end if
+          end do
+          if (duplicate) cycle
+
+          n_modes = n_modes + 1
+          er_m(n_modes)  = x
+          sig_m(n_modes) = sig
+          H_m(n_modes)   = Hv
+          bnd_m(n_modes) = .false.
+      end do refine_candidates
 
   contains
 
@@ -345,7 +387,7 @@ contains
           end do
       end subroutine newton_refine
 
-  end subroutine locate_peak
+  end subroutine locate_modes
 
   ! Trapezoid rule over [lo, lo + (npts-1)*h].  For a smooth integrand
   ! vanishing at both edges this is spectrally accurate on a uniform grid.
@@ -368,26 +410,30 @@ contains
       total = total * h
   end function integrate_window
 
-  ! Shared driver for PpqN / PpqG: locate the integrand peak, place the
-  ! integration window around it, and guard the window edges.
+  ! Shared driver for PpqN / PpqG: locate every integrand mode, place an
+  ! integration window around each, merge overlapping windows, and guard
+  ! the window edges.
   pure function integrate_band(Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma) result(res)
       real(c_double), intent(in) :: Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
       logical, intent(in) :: is_gamma
       real(c_double) :: res
 
       integer, parameter :: max_pts = 200000
-      real(c_double) :: sp2, sq2, Er_star, sigma_Er, H_star
-      real(c_double) :: lo, hi, h_target, h, f_star, f_lo, f_hi, maxx_scan, resolution
-      integer :: status, npts, guard
+      real(c_double) :: sp2, sq2, maxx_scan, resolution
+      real(c_double) :: er_m(max_modes), sig_m(max_modes), H_m(max_modes)
+      logical :: bnd_m(max_modes)
+      real(c_double) :: w_lo(max_modes), w_hi(max_modes), w_ht(max_modes), w_sig(max_modes)
+      real(c_double) :: h, f_star, f_lo, f_hi, lo_limit, hi_limit, tmp
+      integer :: n_modes, n_win, m, j, npts, guard
       logical :: need_lo, need_hi
 
       sp2 = sigp(Ep, eps, V, p0, p10)**2
       sq2 = sigq(Eq, q0, q10)**2
 
-      call locate_peak(Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma, &
-                       Er_star, sigma_Er, H_star, status)
+      call locate_modes(Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma, &
+                        er_m, sig_m, H_m, bnd_m, n_modes)
 
-      if (status == PEAK_FAILED) then
+      if (n_modes == 0) then
           ! Last resort: the original fine grid over the full range.
           ! Guaranteed correct, rarely taken.
           maxx_scan  = max(1.1d0 * max(Ep, Eq), max(Ep, Eq) + 10.0d0)
@@ -399,37 +445,92 @@ contains
       end if
 
       ! Predicted peak log-value so small the integral underflows to zero
-      if (H_star < -600.0d0) then
+      if (maxval(H_m(1:n_modes)) < -600.0d0) then
           res = 0.0d0
           return
       end if
 
-      ! Window: +/- 8 sigma around an interior peak; for a boundary decay,
-      ! 35 decay lengths puts the truncated tail below 1e-15 relative.
-      lo = max(er_min, Er_star - 8.0d0 * sigma_Er)
-      hi = Er_star + merge(35.0d0, 8.0d0, status == PEAK_BOUNDARY) * sigma_Er
+      ! One window per mode: +/- 8 sigma around an interior peak; for a
+      ! boundary decay, 35 decay lengths puts the truncated tail below
+      ! 1e-15 relative.
+      do m = 1, n_modes
+          if (bnd_m(m)) then
+              w_lo(m) = er_min
+              w_hi(m) = er_m(m) + 35.0d0 * sig_m(m)
+          else
+              w_lo(m) = max(er_min, er_m(m) - 8.0d0 * sig_m(m))
+              w_hi(m) = er_m(m) + 8.0d0 * sig_m(m)
+          end if
+          w_ht(m)  = sig_m(m) / 6.0d0
+          w_sig(m) = sig_m(m)
+      end do
 
-      h_target = sigma_Er / 6.0d0
-      ! Resolve the sharp low-Er component of the gamma spectrum when the
-      ! window reaches down into it
-      if (is_gamma .and. lo < 5.0d0 * PGb_scale) h_target = min(h_target, PGb_scale / 6.0d0)
+      ! Sort windows by lower edge (n_modes <= 4)
+      do m = 1, n_modes - 1
+          do j = 1, n_modes - m
+              if (w_lo(j) > w_lo(j + 1)) then
+                  tmp = w_lo(j);  w_lo(j)  = w_lo(j + 1);  w_lo(j + 1)  = tmp
+                  tmp = w_hi(j);  w_hi(j)  = w_hi(j + 1);  w_hi(j + 1)  = tmp
+                  tmp = w_ht(j);  w_ht(j)  = w_ht(j + 1);  w_ht(j + 1)  = tmp
+                  tmp = w_sig(j); w_sig(j) = w_sig(j + 1); w_sig(j + 1) = tmp
+              end if
+          end do
+      end do
 
-      f_star = band_integrand(Er_star, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma)
+      ! Merge overlapping windows, keeping the finer step
+      n_win = 1
+      do m = 2, n_modes
+          if (w_lo(m) <= w_hi(n_win)) then
+              w_hi(n_win)  = max(w_hi(n_win), w_hi(m))
+              w_ht(n_win)  = min(w_ht(n_win), w_ht(m))
+              w_sig(n_win) = min(w_sig(n_win), w_sig(m))
+          else
+              n_win = n_win + 1
+              w_lo(n_win)  = w_lo(m)
+              w_hi(n_win)  = w_hi(m)
+              w_ht(n_win)  = w_ht(m)
+              w_sig(n_win) = w_sig(m)
+          end if
+      end do
 
-      do guard = 1, 4
-          npts = min(max(int((hi - lo) / h_target) + 2, 25), max_pts)
-          h    = (hi - lo) / (npts - 1)
-          res  = integrate_window(lo, h, npts, Ep, Eq, a, b, F0, s, eps, V, &
-                                  p0, p10, q0, q10, is_gamma)
-          ! Edge guard: expand if the integrand has not died off at the
-          ! window edges (protects against an underestimated sigma_Er)
-          f_lo = band_integrand(lo, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma)
-          f_hi = band_integrand(hi, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma)
-          need_lo = f_lo > 1.0d-10 * f_star .and. lo > er_min
-          need_hi = f_hi > 1.0d-10 * f_star
-          if (.not. (need_lo .or. need_hi)) exit
-          if (need_lo) lo = max(er_min, lo - 4.0d0 * sigma_Er)
-          if (need_hi) hi = hi + 4.0d0 * sigma_Er
+      ! Edge-guard threshold: the tallest mode sets the scale
+      f_star = 0.0d0
+      do m = 1, n_modes
+          f_star = max(f_star, band_integrand(er_m(m), Ep, Eq, a, b, F0, s, eps, V, &
+                                              p0, p10, q0, q10, is_gamma))
+      end do
+
+      res = 0.0d0
+      do m = 1, n_win
+          ! Resolve the sharp low-Er component of the gamma spectrum when
+          ! the window reaches down into it
+          if (is_gamma .and. w_lo(m) < 5.0d0 * PGb_scale) w_ht(m) = min(w_ht(m), PGb_scale / 6.0d0)
+
+          ! Guard expansions must not cross into neighbouring windows:
+          ! adjacent edges share a point, whose two half-weights sum to
+          ! the full trapezoid weight of the union.
+          lo_limit = er_min
+          if (m > 1) lo_limit = w_hi(m - 1)
+          hi_limit = huge(1.0d0)
+          if (m < n_win) hi_limit = w_lo(m + 1)
+          w_lo(m) = max(w_lo(m), lo_limit)
+
+          do guard = 1, 4
+              npts = min(max(int((w_hi(m) - w_lo(m)) / w_ht(m)) + 2, 25), max_pts)
+              h    = (w_hi(m) - w_lo(m)) / (npts - 1)
+              tmp  = integrate_window(w_lo(m), h, npts, Ep, Eq, a, b, F0, s, eps, V, &
+                                      p0, p10, q0, q10, is_gamma)
+              ! Edge guard: expand if the integrand has not died off at the
+              ! window edges (protects against an underestimated sigma)
+              f_lo = band_integrand(w_lo(m), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma)
+              f_hi = band_integrand(w_hi(m), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma)
+              need_lo = f_lo > 1.0d-10 * f_star .and. w_lo(m) > lo_limit
+              need_hi = f_hi > 1.0d-10 * f_star .and. w_hi(m) < hi_limit
+              if (.not. (need_lo .or. need_hi)) exit
+              if (need_lo) w_lo(m) = max(lo_limit, w_lo(m) - 4.0d0 * w_sig(m))
+              if (need_hi) w_hi(m) = min(hi_limit, w_hi(m) + 4.0d0 * w_sig(m))
+          end do
+          res = res + tmp
       end do
   end function integrate_band
 
