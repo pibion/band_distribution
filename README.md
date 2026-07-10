@@ -5,29 +5,17 @@ This code is useful for dark matter searches where detector output is Ep (total 
 
 This project uses the Fortran Package Manager (fpm).  You'll need to install that to build this project; please see https://fpm.fortran-lang.org/install/index.html#install for instructions on installing fpm on your system.  Currently (Nov 2025), building from source will install version 0.14 while installing the package via e.g. `conda` will install version 0.12.
 
-The commands below should work with `fpm` 0.12.0 and with the compiler versions shown.
-With `fpm` releases more recent than 0.12.0, one can replace `flang-new` with `flang`.
+The code parallelizes its integration loops with `do concurrent` using locality specifiers, including the Fortran 2023 `reduce` clause.  This is a hard requirement — there is no serial fallback — so you need a recent compiler.  The versions below have been verified via the docker containers in this repository:
 
-|Vendor| Version(s)      |  Build/Test Command                                                                                                                      |
-|------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------|
-|GNU   | 14.3.0, 15.2.0  | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4"`                         |
-|      | 13.4.0          | `fpm test --compiler gfortran --profile release --flag "-cpp -march=native -fopenmp -ftree-parallelize-loops=4 -ffree-line-length-none"` |
-|Intel | 2025.2.1        | `fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release`                                          |
-|LLVM  | 20-22           | `fpm test --compiler flang-new --profile release --flag "-cpp -O3"`                                                                      | 
-|      | 19              | `fpm test --compiler flang-new --profile release --flag "-cpp -O3 -mmlir -allow-assumed-rank"`                                           |
-|NAG   | 7.2, Build 7235 | `fpm test --compiler nagfor --flag "-fpp -O4"`                                                                                           |
+|Vendor| Version(s)      |  Build/Test Command                                                                                                                        |
+|------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+|GNU   | 15.2.0          | `fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"`         |
+|Intel | 2025.2.1        | `fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release`                                        |
+|LLVM  | 22              | `fpm test --compiler flang --profile release --flag "-O3 -fopenmp -fdo-concurrent-to-openmp=host"`                                         |
 
-**Caveat:** In the case of LLVM 19-20, the above commands succeed for testing band_distribution's Julienne dependency.
-A future pull request could test band_distribution itself with LLVM 19-20 via GitHub Actions.
-
-### Preprocessor macros
-* Add `-DCANNOT_DO_CONCURRENT=1` in the `--flag` argument to turn off `do concurrent` code if you have a compiler that does not implement this feature.
-
-### Experimental parallelization
-To multithread `do concurrent` on CPUs with LLVM `flang` 21 or later, try the following:
-```
-fpm test --compiler flang-new --profile release --flag "-O3 -cpp -fopenmp -fdo-concurrent-to-openmp=host"
-```
+Notes:
+* Intel: the shared library must also be linked against the Intel OpenMP runtime for the Python ctypes interface to work; the Intel container does this by setting `FPM_LDFLAGS="-liomp5"`.  The `-fpp -DHAVE_MULTI_IMAGE_SUPPORT=0` flags are for the Julienne dependency.
+* LLVM: the compiler is invoked as `flang` (the `flang-new` name was dropped in LLVM 20).  `-fdo-concurrent-to-openmp=host` is what parallelizes the `do concurrent` loops; without it they compile to serial loops.  The LLVM container sets `FPM_LDFLAGS="-fopenmp"` so the shared library links against `libomp`.
 
 # Testing the python calls
 This code builds a library that may be called within python (this is the original intent of the code).  The python test scripts live in `test/python/` and should be run from the repository root.  To test the python calls, run

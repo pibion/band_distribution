@@ -61,9 +61,21 @@ COPY fpm.toml /app/
 RUN mkdir /app/python
 COPY python /app/python/
 
-# Now compile the fortran code
-RUN fpm test --compiler flang-new --profile release --flag -O3 \
-    && fpm install --prefix=.  --compiler flang-new --profile release --flag -O3
+# Link the LLVM OpenMP runtime into everything fpm builds here (including
+# interactive fpm invocations inside the container).  The flang-compiled
+# shared library references __kmpc_* symbols, and without -fopenmp at link
+# time the Python ctypes load of libband_distribution.so fails.
+ENV FPM_LDFLAGS="-fopenmp"
+
+# Now compile the fortran code.
+# The compiler is invoked as `flang`: the flang-new name was dropped in
+# LLVM 20.  -fdo-concurrent-to-openmp=host parallelizes the do concurrent
+# loops via the OpenMP runtime; without it they compile to serial loops.
+# LD_LIBRARY_PATH is cleared for the compile: the Intel packages in the
+# conda env put their own (stripped) libLLVM on the path at activation,
+# which breaks the system flang with a symbol lookup error.
+RUN LD_LIBRARY_PATH="" fpm test --compiler flang --profile release --flag "-O3 -fopenmp -fdo-concurrent-to-openmp=host" \
+    && LD_LIBRARY_PATH="" fpm install --prefix=. --compiler flang --profile release --flag "-O3 -fopenmp -fdo-concurrent-to-openmp=host"
 
 # Needed to find the appropriate .so files from within python
 ENV LD_LIBRARY_PATH=/app/lib:$LD_LIBRARY_PATH
