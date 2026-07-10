@@ -1,13 +1,6 @@
 import numpy as np
-from scipy import special
 import scipy.integrate as integrate
-import scipy.optimize as so
 from scipy.optimize import curve_fit
-import os
-try:
-    import ML_estimation_functions as ml
-except:
-    pass
 
 # order of parameters: specified by this dictionary 
 # When building functions: leave out un-needed parameters, always give default values
@@ -47,13 +40,6 @@ def Y(Er,
     #ER should be in keV
     #a=0.16; b=0.18 from previous NRFano paper
     #return a*np.absolute(Er)**0.6
-    if isinstance(Er, (list, tuple, np.ndarray)):
-        print ("Er in Y is an array")
-
-    if isinstance(a*np.absolute(Er)**b, (list, tuple, np.ndarray)):
-        print ("Somehow the yield is evaluating to an array")
-        print ("a, Er, and b are ", a, Er, b)
-
     return a*np.absolute(Er)**b
 
 #define the Fano Factors for ERs and NRs
@@ -70,9 +56,6 @@ def Nbar(Er,
 	  *,
 	  a=0.16,b=0.18,
 	  eps=3e-3):
-    
-    if isinstance(Y(Er,a=a,b=b), (list, tuple, np.ndarray)):
-        print ("Y in Nbar is an array")
     return Y(Er,a=a,b=b)*Er/eps
 
 #phonon and ionization resolutions
@@ -134,16 +117,6 @@ def bN(Er,Ep,Eq,
     t1 = 1/(2*Nbar(Er,a=a,b=b,eps=eps)*F(Er,F0=F0,s=s))
     t2 = eps**2/(2*sigq(Eq,q0=q0,q10=q10)**2)
     t3 = V**2/(2*(sigp(Ep,eps=eps,V=V,p0=p0,p10=p10)*1e3)**2)
-
-    if isinstance(t1, (list, tuple, np.ndarray)):
-        print ("t1 in bN is an array")
-
-    if isinstance(t2, (list, tuple, np.ndarray)):
-        print ("t2 in bN is an array")
-
-    if isinstance(t3, (list, tuple, np.ndarray)):
-        print ("t3 in bN is an array")
-
     return t1+t2+t3
 
 def cN(Er,Ep,Eq,
@@ -159,16 +132,6 @@ def cN(Er,Ep,Eq,
     t3 = -Nbar(Er,a=a,b=b,eps=eps)/(2*F(Er,F0=F0,s=s))
     return t1+t2+t3
 
-def CN(Er,Ep,Eq,
-	      *,
-	      a=0.16,b=0.18,
-	      F0=0.122,s=0.0,
-	      eps=3.0e-3,
-	      V=3.0,
-	      p0=0.06421907, p10=0.48998486,
-	      q0=0.23718488, q10=0.27093151):
-    return 1/(2*np.pi*np.sqrt(2*np.pi)*sigp(Ep,eps=eps,V=V,p0=p0,p10=p10)*sigq(Eq,q0=q0,q10=q10)*np.sqrt(Nbar(Er,a=a,b=b,eps=eps)*F(Er,F0=F0,s=s)))
-
 def PpqExp(Er,Ep,Eq,
 	          *,
 	          a=0.16,b=0.18,
@@ -180,29 +143,8 @@ def PpqExp(Er,Ep,Eq,
     cN_val = cN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
     aN_val = aN(Er,Ep,Eq,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
     bN_val = bN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-
-    if isinstance(cN_val, (list, tuple, np.ndarray)):
-        print ("cN is returning an array")
-
-    if isinstance(aN_val, (list, tuple, np.ndarray)):
-        print ("aN is returning an array")
-
-    if isinstance(bN_val, (list, tuple, np.ndarray)):
-        print ("bN is returning an array")
-
     exponent = cN_val + (aN_val**2 / (4*bN_val))
     return exponent
-
-def PpqPreExp(Er,Ep,Eq,
-		     *,
-		     a=0.16,b=0.18,
-		     F0=0.122,s=0.0,
-		     eps=3.0e-3,
-		     V=3.0,
-		     p0=0.06421907, p10=0.48998486,
-		     q0=0.23718488, q10=0.27093151):
-    exponent = PpqExp(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    return (1/2)*np.sqrt(np.pi)*CN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)*np.exp(exponent)*(1/np.sqrt(bN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)))
 
 def PpqFullN(Er, Ep, Eq,
              *,
@@ -254,270 +196,6 @@ def PpqFullN(Er, Ep, Eq,
     simps_w = np.array([1,4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,1], dtype=float)
     return float((h_N / 3.0) * np.dot(simps_w, integrand) * PErN(Er))
 
-def PpqN(Ep,Eq,
-	     *,
-	     a=0.16,b=0.18,
-	     F0=0.122,s=0.0,
-	     eps=3.0e-3,
-	     V=3.0,
-	     p0=0.06421907, p10=0.48998486,
-	     q0=0.23718488, q10=0.27093151):
-    Er0 = Ep-(V*Eq/eps)*1e-3
-    Er0Y = a*(np.absolute(Er0)**(b))*Er0
-    f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    loc = so.fmin(f,x0 = np.absolute(Er0Y), args=(Ep,Eq), disp = False)
-    g = lambda er,ep,eq: PpqFullN(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    sca = 10 #np.sqrt(1/(2*W0))
-    NoDevs = 5
-    minx = np.max([(loc[0]-NoDevs*sca),0])
-    maxx = np.max([(loc[0]+NoDevs*sca),0])
-    ans = integrate.quad(g, minx, maxx, args = (Ep,Eq,))
-    # (integral, abs_error), (er_arr, er_integrand_arr), (Er_low, Er_high, Er_max)
-    return ans, (None, None), (minx, maxx, loc)
-
-def PpqNfast(Ep,Eq,
-		 *,
-		 a=0.16,b=0.18,
-		 F0=0.122,s=0.0,
-		 eps=3.0e-3,
-		 V=3.0,
-		 p0=0.06421907, p10=0.48998486,
-		 q0=0.23718488, q10=0.27093151,
-		 imn=5,imx=50):
-    g = lambda er,ep,eq: PpqFullN(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    ans = integrate.quad(g, imn, imx, args = (Ep,Eq,))[0]
-    return ans
-
-def PpqNfast2_inspect(Ep,Eq,
-		  *,
-		  a=0.16,b=0.18,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=0.01,imx=400,N=1000):
-    g = lambda er,ep,eq: PpqFullN(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-
-    bins=np.linspace(imn,imx,N)
-    de=np.mean(np.diff(bins))
-    er_integrand_arr = np.zeros(np.size(bins))
-    er_arr = np.zeros(np.size(bins))
-    ans=0
-    for idx, e in enumerate(bins):
-      ans+=g(e,Ep,Eq)*de
-      er_arr[idx] = e
-      #er_integrand_arr[idx] = g(e,Ep,Eq)
-
-    return ans, (er_arr, er_integrand_arr)
-
-def PpqNfast2a_inspect(Ep, Eq,
-              *,
-              a=0.16, b=0.18,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              imn=5,imx=50,N=1000, tol=1e-4,
-              log_dir="logs"):
-    # Ensure the log directory exists
-    os.makedirs(log_dir, exist_ok=True)
-    do_logging = False
-
-    # Define the log file path
-    log_file_path = os.path.join(log_dir, "PpqNfast2a_log.txt")
-    with open(log_file_path, "w") as log_file:
-        
-        # Define the function (replace PpqFullN with your actual implementation)
-        g = lambda er, ep, eq: PpqFullN(er, ep, eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-        de = (imx-imn)/N
-        # Get the most likely Er
-        Ermx = Ep - (V / 1e3) * (Eq / eps) * 0.3
-        if Ermx < 0:
-            log_file.write(f"Error encountered in PpqNfast2a: {Ermx} is less than zero")
-            Ermx =0
-
-        # Initialize variables
-        ans = 0
-        ansprev = 1.0
-        highidx = 1
-        lowidx = 0
-        er_arr = []
-        er_integrand_arr = []
-        log_file.write("Starting PpqNfast2a calculations\n")
-        log_file.write(f"Initial Ermx: {Ermx}\n")
-        log_file.write(f"Initial highidx: {highidx}, lowidx: {lowidx}\n\n")
-        # Loop from the highest contribution
-        while (ansprev / (ansprev + ans)) > tol:
-            if do_logging:
-                log_file.write(f"Iteration start: ans={ans}, ansprev={ansprev},Ep and Eq={Ep,Eq},comparison with tol={ansprev / (ansprev + ans)}\n" )
-
-            g_val = g(Ermx + de*highidx, Ep, Eq)
-            high_contribution = g_val * de
-            er_integrand_arr.append(g_val)
-            er_arr.append(Ermx + de*highidx)
-            ansprev = high_contribution
-            highidx += 1
-            if do_logging:
-                log_file.write(f"High index {highidx - 1}: contribution={high_contribution}\n")
-
-            if Ermx - de*lowidx > 0:
-                g_val = g(Ermx - de*lowidx, Ep, Eq)
-                low_contribution = g_val * de
-                er_integrand_arr.insert(0, g_val)
-                er_arr.insert(0, Ermx - de*lowidx)
-                ansprev += low_contribution
-                lowidx += 1
-                if do_logging:
-                    log_file.write(f"Low index {lowidx + 1}: contribution={low_contribution}\n")
-
-            ans += ansprev
-            if do_logging:
-                log_file.write(f"Updated ans={ans}, ansprev={ansprev}\n\n")
-
-    return ans, (er_arr, er_integrand_arr)
-
-def PpqN_fast3_inspect(Ep, Eq,
-              *,
-              a=0.16, b=0.18,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              tol=1e-6):
-    Ermx, width = ml.estimateN_ML(Ep, Eq, a, b, F0, s, eps, p0, p10, q0, q10, model_suffix="600params")
-    g = lambda er, ep, eq: PpqFullN(er, ep, eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-    return integrate_g_fast_inspect(g, Ep, Eq, Ermx, width, tol)
-
-def PpqN_fast4_inspect(Ep, Eq, interpolator,
-              *,
-              a=0.16, b=0.18,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              tol=1e-6, threshold=1e-20):
-    # function call is interpolate(self, ep, eq, q10, F0, a, b, p0, p10, method="nearest"):
-    Ermx, width, max_integrand_val = interpolator.interpolate(Ep, Eq, q10, F0, a, b, p0, p10, method="nearest")
-    print ("max integrand value is ", max_integrand_val)
-    if max_integrand_val * width * 12 > threshold:
-        # only integrate if there's a chance the value
-        # is over the user-specificied threshold
-        g = lambda er, ep, eq: PpqFullN(er, ep, eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-        return integrate_g_fast_inspect(g, Ep, Eq, Ermx, width, tol)
-    else:
-        # in most cases the function evaluates to zero 
-        return (0, threshold), (None, None), None
-
-def integrate_g_fast_inspect(g, Ep, Eq, Ermx, width, tol):
-    # how many sigmas to include in the interval
-    sigma = 5
-    fraction_reduced = 1e-5
-    peak_info_array = [{"Ermx": Ermx, "width": width}]
-
-    n_start = 1000
-    minx = max(0, Ermx - sigma*width)
-    maxx = Ermx + sigma*width
-    er_arr = np.linspace(minx, maxx, n_start)
-    er_integrand_arr = np.zeros(np.size(er_arr))    
-    for idx, er in enumerate(er_arr):
-        val = g(er, Ep, Eq)
-        er_integrand_arr[idx] = val
-
-    # sometimes the value at 0 keV is NaN
-    # don't want to include that when getting the max value
-    # max(any array that contains a NaN) = NaN
-    max_val = max(er_integrand_arr[~np.isnan(er_integrand_arr)])
-    print("max val is ", max_val)
-
-    # check that the first value is small enough
-    # the outcome of this loop is that minx is set correctly
-    # er_integrand_arr[0] is sometimes NaN
-    first_val = er_integrand_arr[1]
-    print("first val is ", first_val)
-    i = 0
-    adjust_bounds_bool = False
-    while True:
-        if not first_val == 0:
-            if minx > 0 and first_val/max_val > fraction_reduced:
-                i += 1
-                minx = max(0, Ermx - (sigma + 2**i)*width)
-                first_val = g(minx, Ep, Eq)
-                if first_val > max_val:
-                    max_val = first_val
-                adjust_bounds_bool = True
-                print ("Need to adjust lower bound")
-            else:
-                break
-        else:
-            break
-
-    # check that the last value is small enough
-    # the outcome of this loop is that maxx is set correctly
-    last_val = er_integrand_arr[-1]
-    i = 0
-    while True:
-        if not last_val == 0:
-            if last_val/max_val > fraction_reduced:
-                i += 1
-                maxx = Ermx + (sigma + 2**i)*width
-                last_val = g(maxx, Ep, Eq)
-                if last_val > max_val:
-                    max_val = last_val
-                adjust_bounds_bool = True
-                print ("Need to adjust upper bound")
-            else:
-                break
-        else:
-            break
-
-    peak_info_array[0].update({"minx": minx, "maxx": maxx})
-
-    # see formula at https://en.wikipedia.org/wiki/Riemann_sum
-    # for error of integration estimate due to midpoint rule
-    # also: for a guassian,
-    # the absolute value of the maximum value of the second derivative
-    # is twice the max amplitude
-    n = np.sqrt(2*max_val*np.power(maxx - minx,3) / (24 * tol))
-    # make n an integer so we can use it in the linspace call
-    n = int(np.ceil(n))
-
-    if n > n_start or adjust_bounds_bool:
-        if n > n_start:
-            print ("have to resample to achieve requested tolerance, required n is ", n)
-        else:
-            # don't want to decrease the sampling 
-            n = n_start
-
-        if adjust_bounds_bool:
-            print ("Bounds were adjusted")
-        er_arr = np.linspace(minx, maxx, n)
-        er_integrand_arr = np.zeros(np.size(er_arr))
-        for idx, er in enumerate(er_arr):
-            val = g(er, Ep, Eq)
-            er_integrand_arr[idx] = val
-        err = 2*max_val*np.power(maxx - minx,3) / (24 * n**2)
-        peak_info_array[0].update({"n": n})
-    else:
-        err = 2*max_val*np.power(maxx - minx,3) / (24 * n_start**2)
-        peak_info_array[0].update({"n": n_start})
-
-    #print("er_arr is ", er_arr)
-    #print("minx: ", minx)
-    #print("maxx: ", maxx)
-    #print("n: ", n)
-
-    # now do integration using the midpoint rule
-    # sometimes the value at 0 keV is NaN
-    # don't want to include that in the calculation
-    delta = np.diff(er_arr)[0]
-    integral = np.sum(er_integrand_arr[~np.isnan(er_integrand_arr)]) * delta
-
-    return (integral, err), (er_arr, er_integrand_arr), peak_info_array
-
 def PpqN_safe_inspect_vec(Ep, Eq,
               *,
               a=0.16, b=0.18,
@@ -526,11 +204,10 @@ def PpqN_safe_inspect_vec(Ep, Eq,
               V=3.0,
               p0=0.06421907, p10=0.48998486,
               q0=0.23718488, q10=0.27093151,
-              res=0.1,
-              log_dir="logs"):
+              res=0.1):
     ppqNArr = []
     for this_Ep, this_Eq in zip(Ep, Eq):
-        PpqNval, _, _ = PpqN_safe_inspect(this_Ep, this_Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res, log_dir=log_dir)
+        PpqNval, _, _ = PpqN_safe_inspect(this_Ep, this_Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res)
         ppqNArr.append(PpqNval[0])
     return ppqNArr
 
@@ -546,8 +223,7 @@ def PpqN_safe_inspect(Ep, Eq,
               V=3.0,
               p0=0.06421907, p10=0.48998486,
               q0=0.23718488, q10=0.27093151,
-              res=0.1,
-              log_dir="logs"):
+              res=0.1):
     if F0 == 0 and s == 0:
         raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
 
@@ -587,49 +263,6 @@ def PpqN_safe_inspect(Ep, Eq,
     g = lambda er, ep, eq: PpqFullN(er, ep, eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
 
     return integrate_g_safe_inspect(g, Ep, Eq, Ermx, res)
-
-"""
-Return just the answer of PpqNfast2
-"""
-def PpqNfast2(Ep,Eq,
-		  *,
-		  a=0.16,b=0.18,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=5,imx=50,N=1000):
-    
-    return PpqNfast2_inspect(Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, imn=imn, imx=imx, N=N)[0]
-
-"""
-Return just the answer of PpqNfast2a
-"""
-def PpqNfast2a(Ep,Eq,
-		  *,
-		  a=0.16,b=0.18,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=5,imx=50,N=1000):
-    
-    return PpqNfast2a_inspect(Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, imn=imn, imx=imx, N=N)[0]
-
-def PpqNfast3(Ep,Eq,
-		  *,
-		  a=0.16,b=0.18,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=5,imx=50,algo='gk21'):
-    g = lambda er,ep,eq: PpqFullN(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    ans = integrate.quad_vec(g, imn, imx, args = (Ep,Eq,),quadrature=algo)[0]
-    return ans
 
 def PpqFullG(Er, Ep, Eq,
              *,
@@ -679,124 +312,6 @@ def PpqFullG(Er, Ep, Eq,
                        * np.exp(exp_arg[mask]))
     simps_w = np.array([1,4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,2,4,1], dtype=float)
     return float((h_N / 3.0) * np.dot(simps_w, integrand) * PErG(Er))
-
-def PpqG(Ep,Eq,
-	     *,
-	     F0=0.122,s=0.0,
-	     eps=3.0e-3,
-	     V=3.0,
-	     p0=0.06421907, p10=0.48998486,
-	     q0=0.23718488, q10=0.27093151):
-    Er0 = Ep-(V*Eq/eps)*1e-3
-    f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,a=1.0,b=0.0,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    loc = so.fmin(f,x0 = np.absolute(Er0), args=(Ep,Eq), disp = False)
-    g = lambda er,ep,eq: PpqFullG(er,ep,eq,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    sca = 10 #np.sqrt(1/(2*W0))
-    NoDevs = 5
-    minx = np.max([(loc[0]-NoDevs*sca),0])
-    maxx = np.max([(loc[0]+NoDevs*sca),0])
-    ans = integrate.quad(g, minx, maxx, args = (Ep,Eq,))[0]
-    return ans
-
-def PpqGfast(Ep,Eq,
-		 *,
-		 F0=0.122,s=0.0,
-		 eps=3.0e-3,
-		 V=3.0,
-		 p0=0.06421907, p10=0.48998486,
-		 q0=0.23718488, q10=0.27093151,
-		 imn=5,imx=50):
-    g = lambda er,ep,eq: PpqFullG(er,ep,eq,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    ans = integrate.quad(g, imn, imx, args = (Ep,Eq,))[0]
-    return ans
-
-def PpqGfast2_inspect(Ep,Eq,
-		  *,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=0.01,imx=400,N=1000):
-    g = lambda er,ep,eq: PpqFullG(er,ep,eq,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-
-    bins=np.linspace(imn,imx,N)
-    de=np.mean(np.diff(bins))
-    er_integrand_arr = np.zeros(np.size(bins))
-    er_arr = np.zeros(np.size(bins))
-    ans=0
-    for idx, e in enumerate(bins):
-      g_val = g(e,Ep,Eq)
-      ans+=g_val*de
-      er_arr[idx] = e
-      er_integrand_arr[idx] =g_val
-
-    return ans, (er_arr, er_integrand_arr)
-
-#***********************
-def PpqGfast2a_inspect(Ep, Eq,
-              *,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              imn=5, imx=50, N=1000, tol=1e-4,
-              log_dir="logs"):
-    # Ensure the log directory exists
-    os.makedirs(log_dir, exist_ok=True)
-
-    # Define the log file path
-    log_file_path = os.path.join(log_dir, "PpqGfast2a_log.txt")
-    with open(log_file_path, "w") as log_file:
-        log_file.write("Starting PpqGfast2a calculations\n")
-        # Define the function (replace PpqFullG with your actual implementation)
-        g = lambda er, ep, eq: PpqFullG(er, ep, eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-        de = (imx-imn)/N
-        # Get the most likely Er
-        Ermx = Ep - (V / 1e3) * (Eq / eps) 
-        if Ermx < 0:
-            log_file.write("Error encountered in PpqNfast2a: {Ermx} is less than zero")
-            Ermx=0
-            #print ("Error encountered in PpqNfast2a: Ermx is set to zero")
-        
-        # Initialize variables
-        ans = 0
-        ansprev = 1.0
-        highidx = 1
-        lowidx =0
-        er_arr = []
-        er_integrand_arr = []
-
-        # Open the log file in write mode
-    
-        log_file.write(f"Initial Ermx: {Ermx}\n")
-        log_file.write(f"Initial highidx: {highidx}, lowidx: {lowidx}\n\n")
-
-        # Loop from the highest contribution
-        while (ansprev / (ansprev + ans)) > tol:
-            log_file.write(f"Iteration start: ans={ans}, ansprev={ansprev}\n")
-            g_val = g(Ermx + de*highidx, Ep, Eq)
-            high_contribution = g_val * de
-            er_integrand_arr.append(g_val)
-            er_arr.append(Ermx + de*highidx)
-            ansprev = high_contribution
-            highidx += 1
-            log_file.write(f"High index {highidx - 1}: contribution={high_contribution}\n")
-
-            if (Ermx - de*lowidx) > 0:
-                g_val = g(Ermx - de*lowidx, Ep, Eq)
-                low_contribution = g_val * de
-                er_integrand_arr.insert(0, g_val)
-                er_arr.insert(0, Ermx - de*lowidx)
-                ansprev += low_contribution
-                lowidx += 1
-                log_file.write(f"Low index {lowidx + 1}: contribution={low_contribution}\n")
-
-            ans += ansprev
-            log_file.write(f"Updated ans={ans}, ansprev={ansprev}\n\n")
-            
-    return ans, (er_arr, er_integrand_arr)
 
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
@@ -976,11 +491,10 @@ def PpqG_safe_inspect_vec(Ep, Eq,
               V=3.0,
               p0=0.06421907, p10=0.48998486,
               q0=0.23718488, q10=0.27093151,
-              res=0.01,
-              log_dir="logs"):
+              res=0.01):
     ppqGArr = []
     for this_Ep, this_Eq in zip(Ep, Eq):
-        PpqGval, _, _ = PpqG_safe_inspect(this_Ep, this_Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res, log_dir=log_dir)
+        PpqGval, _, _ = PpqG_safe_inspect(this_Ep, this_Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res)
         ppqGArr.append(PpqGval[0])
     return ppqGArr
 
@@ -995,8 +509,7 @@ def PpqG_safe_inspect(Ep, Eq,
               V=3.0,
               p0=0.06421907, p10=0.48998486,
               q0=0.23718488, q10=0.27093151,
-              res=0.01,
-              log_dir="logs"):
+              res=0.01):
     if F0 == 0 and s == 0:
         raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
 
@@ -1036,130 +549,3 @@ def PpqG_safe_inspect(Ep, Eq,
 
     return integrate_g_safe_inspect(g, Ep, Eq, Ermx, res)
 
-def PpqG_fast2b(Ep, Eq,
-              *,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              imn=5, imx=50, N=1000, tol=1e-6,
-              log_dir="logs"):
-    # Set parameters for integration
-    change_tol = 0.1
-    de_limit = 0.001
-
-    # Define the function (replace PpqFullG with your actual implementation)
-    g = lambda er, ep, eq: PpqFullG(er, ep, eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
-    de_high = (imx-imn)/N
-    de_low = (imx-imn)/N
-    # Get the most likely Er
-    Ermx = Ep - (V / 1e3) * (Eq / eps) 
-    if Ermx < 0:
-        Ermx=0
-        #print ("Error encountered in PpqNfast2a: Ermx is set to zero")
-    print("Max Er for gamma is calculated as ", Ermx)
-
-    # Initialize variables
-    ans_high = 0
-    ansprev_high = 1.0
-    ans_low = 0
-    ansprev_low = 1.0
-    Er_val = Ermx
-    er_arr = []
-    er_integrand_arr = []
-    first_pass = True
-    de_high_first = 0
-
-    # Do an initial check of the de 
-    # Initially de_high and de_low are the same value
-    de = de_high
-    g_val = g(Er_val, Ep, Eq)
-    g_val_advance =  g(Er_val + 0.5*de, Ep, Eq)
-    if Er_val - de > 0:
-        g_val_behind = g(Er_val - de, Ep, Eq)
-    else:
-        g_val_behind = g_val
-
-    de_high_is_large = False
-    de_low_is_large = False
-    if np.abs((g_val_advance - g_val) / g_val) > change_tol:
-        de_high_is_large = True
-        print ("have to change de right away for upwards integral")
-    
-    if np.abs((g_val_behind - g_val) / g_val) > change_tol:
-        de_low_is_large = True
-        print ("have to change de right away for downwards integral")
-
-    # Loop from the highest contribution
-    while (ansprev_high / (ansprev_high + ans_high)) > tol/2:
-        g_val = g(Er_val + 0.5*de_high, Ep, Eq)
-        high_contribution = g_val * de_high
-
-        if((np.abs((ansprev_high-high_contribution) / ansprev_high) < change_tol or de_high < de_limit) and not de_high_is_large):
-            er_integrand_arr.append(g_val)
-            er_arr.append(Er_val)
-            ansprev_high = high_contribution
-            Er_val += de_high
-            ans_high += ansprev_high
-            if first_pass:
-                de_high_first = de_high
-                first_pass = False
-        elif (de_high > de_limit):
-            de_high = de_high/5
-            print ("changing de_high to ", de_high)
-            de_high_is_large = False
-        else:
-            print ("WARNING: reached de_limit without reaching function change tolerance")
-
-    # Reset Er_val so we can integrate downwards
-    Er_val = Ermx - 0.5*de_low - 9.5*de_high_first
-
-    while ((True if ans_low <= 0 else ansprev_low / ans_low > tol/2)) and (Er_val > 0):
-        
-        g_val = g(Er_val, Ep, Eq)
-        low_contribution = g_val * de_low
-
-        if((np.abs((ansprev_low-low_contribution) / ansprev_low) < change_tol or de_low < de_limit) and not de_low_is_large):
-            er_integrand_arr.insert(0, g_val)
-            er_arr.insert(0, Er_val)
-            ansprev_low = low_contribution
-            Er_val -= de_low
-            ans_low += ansprev_low
-        elif(de_low > de_limit):
-            de_low = de_low/5
-            de_low_is_large = False
-            print ("changing de_low to ", de_low)
-        else:
-            print ("WARNING: reached de_limit without reaching function change tolerance")
-
-    return (ans_low + ans_high, error), (er_arr, er_integrand_arr)
-
-"""
-Return just the answer of PpqGfast2a
-"""
-def PpqGfast2a(Ep,Eq,
-		  *,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=5,imx=50,N=1000):
-    
-    return PpqGfast2a_inspect(Ep, Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, imn=imn, imx=imx, N=N)[0]
-    
-"""
-Return just the answer of PpqGfast2
-"""
-def PpqGfast2(Ep,Eq,
-		  *,
-		  F0=0.122,s=0.0,
-		  eps=3.0e-3,
-		  V=3.0,
-		  p0=0.06421907, p10=0.48998486,
-		  q0=0.23718488, q10=0.27093151,
-		  imn=5,imx=50,N=1000):
-    
-    return PpqGfast2_inspect(Ep, Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, imn=imn, imx=imx, N=N)[0]
-    
