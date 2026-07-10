@@ -63,6 +63,14 @@ COPY fpm.toml /app/
 RUN mkdir /app/python
 COPY python /app/python/
 
+# Link the Intel OpenMP runtime into everything fpm builds here (including
+# interactive fpm invocations inside the container).  The ifx-compiled
+# shared library references __kmpc_* symbols, and without -liomp5 the
+# Python ctypes load of libband_distribution.so fails.  This lives here
+# rather than in fpm.toml because libiomp5 is Intel-specific: the gfortran
+# build uses libgomp (linked automatically by -fopenmp).
+ENV FPM_LDFLAGS="-liomp5"
+
 # Build the Fortran library and copy all shared objects to /app/lib so the
 # Python ctypes wrapper can find them via LD_LIBRARY_PATH.
 RUN fpm build --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \

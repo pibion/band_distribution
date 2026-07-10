@@ -52,7 +52,6 @@ contains
           associate(npts => int((maxx - minx) / resolution) + 1)
             define_recoil_energies: &
             associate(er_arr => [(minx + (i - 1) * resolution, i = 1, npts)])
-#if ! CANNOT_DO_CONCURRENT
               integral = 0.0d0
               do concurrent(i = 1:npts) default(none) reduce(+: integral) &
                   shared(er_arr, a, b, Ep, Eq, F0, s, eps, V, norm_const, &
@@ -107,9 +106,6 @@ contains
                   end if
                   integral = integral + contrib_i
               end do
-#else
-              integral = sum([(PpqFullN(er_arr(i), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10), i = 1, npts)])
-#endif
               res = integral * resolution
             end associate define_recoil_energies
           end associate integrate_PpqFullN
@@ -259,7 +255,6 @@ contains
   ! Evaluates the N integral numerically via 21-point simps from stdlib.
   ! sigp and sigq are evaluated at exact noiseless energies (Er+V*N/1000,
   ! eps*N) per sample point, matching the data simulator exactly.
-  ! Used as fallback when CANNOT_DO_CONCURRENT is set.
   module procedure PpqFullN
       real(c_double) :: F_val, Nbar_val, sigma_N, norm_const
       real(c_double) :: sp0, sp1, sq0, sq1
