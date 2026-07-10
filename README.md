@@ -69,7 +69,7 @@ To run inside the Intel docker container, mount the repository's `figures/` dire
 
 ```
 docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
-    bash --login -c "conda activate NR_Fano && python /app/test/python/test_chisquare_nr_simulator.py 100 64"
+    bash --login -c "conda activate band && python /app/test/python/test_chisquare_nr_simulator.py 100 64"
 ```
 
 # Build the singularity/apptainer container for HPC submissions
@@ -118,6 +118,8 @@ You can issue this command from any directory.  Note the absolute path names for
 ```
 docker run -it --rm -p 8888:8888 -v /mnt/c/Users/canto/Repositories/nrFanoII:/home/jovyan/work/nrFano band_jupyter:latest
 ```
+
+In notebooks, select the **Python (band)** kernel — it runs in the `band` conda environment (built from `environment.yaml`, the same environment used by the other containers), which has the compiled library's runtime dependencies and all the python packages.
 
 # Profiling with TAU
 TAU is built into `Dockerfile_tau_intel`. Build that image first:

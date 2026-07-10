@@ -39,13 +39,24 @@ RUN echo ". /opt/anaconda/etc/profile.d/conda.sh" >> ~/.bash_profile
 RUN echo ". /opt/anaconda/etc/profile.d/conda.sh" >> ~/.bashrc
 
 # Copy environment.yaml file
-COPY NR_Fano_dan_env.yaml .
+COPY environment.yaml .
 
 # Create conda environment from the yaml file
 # this installs fpm and intel compiler (ifx)
-RUN conda env create -f NR_Fano_dan_env.yaml
-RUN echo "conda activate NR_Fano" >> ~/.bash_profile
-RUN echo "conda activate NR_Fano" >> ~/.bashrc
+#
+# Ordering note: this must come before the TAU build below because TAU's
+# configure step needs ifx from this environment.  It would be tempting to
+# build TAU first (it takes by far the longest, and editing
+# environment.yaml invalidates the TAU layer), but that would require
+# installing ifx separately and adding the python packages to the
+# environment afterwards with `conda env update` -- and a two-stage
+# install can resolve to a different environment (e.g. a different python
+# version) than the single-shot create used by the other containers.
+# Creating the full environment first guarantees this container's python
+# environment is identical to theirs.
+RUN conda env create -f environment.yaml
+RUN echo "conda activate band" >> ~/.bash_profile
+RUN echo "conda activate band" >> ~/.bashrc
 
 # Source - https://stackoverflow.com/a/39777387
 # Posted by Ahmad Abdelghany, modified by community. See post 'Timeline' for change history
@@ -72,8 +83,8 @@ ENV PATH="/packages/tau2/x86_64/bin:${PATH}"
 RUN ln -s /packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64/libelf.so \
           /packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64/libelf.so.1
 
-# Make libelf and the Intel math libraries (from the NR_Fano conda env) findable at runtime
-ENV LD_LIBRARY_PATH="/packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64:/opt/anaconda/envs/NR_Fano/lib:${LD_LIBRARY_PATH}"
+# Make libelf and the Intel math libraries (from the band conda env) findable at runtime
+ENV LD_LIBRARY_PATH="/packages/tau2/x86_64/libelf-devel-0.158-6.1.x86_64/lib64:/opt/anaconda/envs/band/lib:${LD_LIBRARY_PATH}"
 
 WORKDIR /app
 

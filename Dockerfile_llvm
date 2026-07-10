@@ -32,13 +32,13 @@ RUN echo ". /opt/anaconda/etc/profile.d/conda.sh" >> ~/.bash_profile
 RUN echo ". /opt/anaconda/etc/profile.d/conda.sh" >> ~/.bashrc
 
 # Copy environment.yaml file
-COPY NR_Fano_dan_env.yaml .
+COPY environment.yaml .
 
 # Create conda environment from the yaml file
 # this installs fpm and intel compiler
-RUN conda env create -f NR_Fano_dan_env.yaml
-RUN echo "conda activate NR_Fano" >> ~/.bash_profile
-RUN echo "conda activate NR_Fano" >> ~/.bashrc
+RUN conda env create -f environment.yaml
+RUN echo "conda activate band" >> ~/.bash_profile
+RUN echo "conda activate band" >> ~/.bashrc
 
 # Source - https://stackoverflow.com/a/39777387
 # Posted by Ahmad Abdelghany, modified by community. See post 'Timeline' for change history
