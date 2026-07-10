@@ -881,7 +881,11 @@ def integrate_g_safe_inspect(g, Ep, Eq, Ermx, resolution):
         maxx = peak_info["maxx"]
         # print ("final minx and maxx for peak ", jdx, " are ", minx, maxx)
         # integrate and record the value
-        ans = integrate.quad(g, minx, maxx, args = (Ep,Eq,))
+        # epsabs=0 forces quad to meet the *relative* tolerance: these
+        # integrands can be ~1e-20, far below the default epsabs=1.49e-8,
+        # so with the default quad accepts its first coarse estimate over
+        # the wide window without ever subdividing around the narrow peak
+        ans = integrate.quad(g, minx, maxx, args = (Ep,Eq,), epsabs=0, limit=200)
         peak_info_array[jdx]["integral"] = ans[0]
         peak_info_array[jdx]["error"] = ans[1]
         
@@ -972,11 +976,11 @@ def PpqG_safe_inspect_vec(Ep, Eq,
               V=3.0,
               p0=0.06421907, p10=0.48998486,
               q0=0.23718488, q10=0.27093151,
-              res=0.1,
+              res=0.01,
               log_dir="logs"):
     ppqGArr = []
     for this_Ep, this_Eq in zip(Ep, Eq):
-        PpqGval, _, _ = PpqG_safe_inspect(this_Ep, this_Eq, F0, s, eps, V, p0, p10, q0, q10, res, log_dir)
+        PpqGval, _, _ = PpqG_safe_inspect(this_Ep, this_Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res, log_dir=log_dir)
         ppqGArr.append(PpqGval[0])
     return ppqGArr
 
@@ -991,15 +995,17 @@ def PpqG_safe_inspect(Ep, Eq,
               V=3.0,
               p0=0.06421907, p10=0.48998486,
               q0=0.23718488, q10=0.27093151,
-              res=0.1,
+              res=0.01,
               log_dir="logs"):
     if F0 == 0 and s == 0:
         raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
 
     # Set parameters for integration
-    # with CDMS parameters, peaks are
-    # never less than 1 keV wide
-    # so a resolution of 0.1 will "catch" them reliably
+    # ER peaks can be as narrow as the zero-energy ionization
+    # resolution q0 (~0.06 keV for test parameters), so the scan
+    # grid must be finer than that to set accurate integration
+    # limits; res=0.01 scans at 0.005 keV, finer than the 0.01 keV
+    # grid the Fortran PpqG integrates on
 
     # Define the function (replace PpqFullG with your actual implementation)
     g = lambda er, ep, eq: PpqFullG(er, ep, eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
