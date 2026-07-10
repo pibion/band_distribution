@@ -29,9 +29,8 @@ The chi-square histogram is written to figures/chisquare_nr_simulator.png.
 Approximate wall times (18 workers, x86 emulation on an Apple Silicon Mac;
 native x86 hardware should be faster):
 
-    n_throws=100,   n_bins=64   ~ 25 min   (smoke test)
-    n_throws=100,   n_bins=400  ~ 30 min
-    n_throws=10000, n_bins=400  ~ 70 min   (full validation)
+    n_throws=100,   n_bins=64   ~ 1 min   (smoke test)
+    n_throws=10000, n_bins=400  ~ 7 min   (full validation)
 """
 
 import os
