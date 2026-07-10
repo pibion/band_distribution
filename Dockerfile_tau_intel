@@ -91,6 +91,11 @@ COPY fpm.toml /app/
 RUN mkdir /app/python
 COPY python /app/python/
 
+# Link the Intel OpenMP runtime into everything fpm builds here (including
+# interactive fpm invocations inside the container); without -liomp5 the
+# Python ctypes load of libband_distribution.so fails on __kmpc_* symbols.
+ENV FPM_LDFLAGS="-liomp5"
+
 # Now compile the fortran code
 RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
     && fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
