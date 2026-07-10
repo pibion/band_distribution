@@ -1,27 +1,36 @@
-# Nix builder
-FROM nixos/nix
+# Ubuntu 26.04 LTS ships gfortran 15.2 as the default gfortran package,
+# which supports the do concurrent locality specifiers (including the
+# Fortran 2023 reduce clause) this project requires.
+FROM ubuntu:26.04
 
-RUN nix-channel --update
+ENV DEBIAN_FRONTEND=noninteractive
 
-RUN nix-env -iA nixpkgs.gfortran15 nixpkgs.vim
+# python3-numpy/python3-scipy provide the packages needed by the python
+# test scripts; python-is-python3 lets them be invoked as `python`
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    ca-certificates \
+    vim \
+    gfortran \
+    python3 \
+    python-is-python3 \
+    python3-numpy \
+    python3-scipy \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set up working directory
 WORKDIR /app
 
-# Install fpm from source
-# There is an fpm-fortran nix package but it's version 0.11.0
-RUN git clone https://github.com/fortran-lang/fpm
-RUN cd fpm \
+# Install fpm from source (bootstraps itself with gfortran)
+# There is an fpm package on conda but building from source gives a
+# newer version
+RUN git clone https://github.com/fortran-lang/fpm \
+    && cd fpm \
     && ./install.sh
 
-RUN echo "alias fpm=~/.local/bin/fpm" >> ~/.bash_profile
-RUN echo "alias fpm=~/.local/bin/fpm" >> ~/.bashrc
-
-# Copy nix shell file
-COPY shell.nix .
-
-# Build the python environment defined in shell.nix
-RUN nix-shell
+ENV PATH="/root/.local/bin:${PATH}"
 
 # Copy the fortran code over
 # first we build the expected directory structure
@@ -38,12 +47,8 @@ RUN mkdir /app/python
 COPY python /app/python/
 
 # Now compile the fortran code
-RUN ~/.local/bin/fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
-RUN ~/.local/bin/fpm install --prefix=. --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
+RUN fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
+RUN fpm install --prefix=. --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
 
 # Needed to find the appropriate .so files from within python
 ENV LD_LIBRARY_PATH=/app/lib
-
-# Always want to be in the python environment we build with shell.nix
-# Idea from https://ropensci.r-universe.dev/articles/rix/z-advanced-topic-using-nix-inside-docker.html
-CMD ["nix-shell"]
