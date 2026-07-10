@@ -1,0 +1,29 @@
+name: band
+channels:
+  - https://software.repos.intel.com/python/conda
+  - conda-forge
+  - defaults
+dependencies:
+  # python 3.12: new enough for equibin (requires >=3.11), old enough
+  # for numpy<2 (see below), and the version the chi-square validation
+  # of the PDFs was run with
+  - python=3.12
+  - ifx_linux-64
+  - mpi4py
+  - fpm
+  - ford
+  - graphviz
+  - lmfit
+  - ipykernel
+  - matplotlib
+  # numpy<2 because lintsampler 1.0.0 (below) pins numpy<2.0: with a
+  # numpy 2.x conda package installed, the pip step tries to build
+  # numpy 1.x from source and fails.  Drop the pin when a lintsampler
+  # release supports numpy 2.
+  - numpy<2
+  - scipy
+  - pandas
+  - pip
+  - pip:
+    - equibin
+    - lintsampler

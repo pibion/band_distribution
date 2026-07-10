@@ -20,26 +20,13 @@ RUN apt-get update && apt-get install -y \
 # Switch back to jovyan to avoid accidental container runs as root
 USER $NB_UID
 
-# instructions from
-# https://jupyter-docker-stacks.readthedocs.io/en/latest/using/recipes.html#using-mamba-install-recommended-or-pip-install-in-a-child-docker-image
-# ifx_linux-64 requires the Intel conda channel; fpm comes from conda-forge
-RUN mamba install --yes \
-    --channel https://software.repos.intel.com/python/conda \
-    --channel conda-forge \
-    ifx_linux-64 fpm && \
-    mamba clean --all -f -y && \
-    fix-permissions "${CONDA_DIR}" && \
-    fix-permissions "/home/${NB_USER}"
-
-# Install from the requirements.txt file.
-# equibin and lintsampler are only published on PyPI, so they go through
-# pip; everything else installs from conda-forge via mamba.
-# --no-deps: lintsampler 1.0.0 pins numpy<2.0, which has no build for
-# this image's python; its actual dependencies (numpy, scipy,
-# matplotlib) are already installed by mamba above.
-COPY --chown=${NB_UID}:${NB_GID} requirements.txt /tmp/
-RUN mamba install --yes $(grep -v -E "^(equibin|lintsampler)$" /tmp/requirements.txt) && \
-    pip install --no-cache-dir --no-deps equibin lintsampler && \
+# Create the band conda environment from the same environment.yaml used by
+# the other containers (ifx compiler, fpm, and all python packages), and
+# register it as a notebook kernel so notebooks can select "Python (band)".
+# Recipe: https://jupyter-docker-stacks.readthedocs.io/en/latest/using/recipes.html#add-a-custom-conda-environment-and-jupyter-kernel
+COPY --chown=${NB_UID}:${NB_GID} environment.yaml /tmp/
+RUN mamba env create -f /tmp/environment.yaml && \
+    mamba run -n band python -m ipykernel install --user --name band --display-name "Python (band)" && \
     mamba clean --all -f -y && \
     fix-permissions "${CONDA_DIR}" && \
     fix-permissions "/home/${NB_USER}"
@@ -53,11 +40,14 @@ COPY --chown=${NB_UID}:${NB_GID} test/ test/
 COPY --chown=${NB_UID}:${NB_GID} fpm.toml .
 COPY --chown=${NB_UID}:${NB_GID} python/ python/
 
-# Intel runtime libs (libimf.so etc.) live in the conda lib dir; needed at test-run time
-ENV LD_LIBRARY_PATH=${CONDA_DIR}/lib:/home/jovyan/lib
-# Preload Intel OpenMP runtime so __kmpc_* symbols resolve when ctypes loads libband_distribution.so
-ENV LD_PRELOAD=${CONDA_DIR}/lib/libiomp5.so
+# Intel runtime libs (libimf.so, libiomp5.so, ...) live in the band env's
+# lib dir; needed when python ctypes loads libband_distribution.so
+ENV LD_LIBRARY_PATH=${CONDA_DIR}/envs/band/lib:/home/jovyan/lib
 
-# Now compile the fortran code
-RUN fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
-    && fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
+# Link the Intel OpenMP runtime into everything fpm builds here; without
+# -liomp5 the Python ctypes load fails on __kmpc_* symbols
+ENV FPM_LDFLAGS="-liomp5"
+
+# Now compile the fortran code with the band env's ifx and fpm
+RUN mamba run -n band fpm test --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release \
+    && mamba run -n band fpm install --compiler ifx --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0" --profile release --prefix .
