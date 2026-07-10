@@ -9,9 +9,9 @@ repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 module_dir = os.path.join(repo_root, 'python')
 sys.path.append(module_dir)
 
-# File PpqDist_v6 contains our existing (tested!) python functions
-# For P(Ep, Eq)
-import pq_dist_v6 as ppq
+# pq_dist_v8 contains the Python implementation with the numerical N integral
+# (21-point Simpson's rule, sigp/sigq at noiseless energies), matching Fortran PpqN.
+import pq_dist_v8 as ppq
 
 folderpath = repo_root
 if os.name == 'posix': #Linux/Mac
