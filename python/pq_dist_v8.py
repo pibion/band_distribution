@@ -399,8 +399,11 @@ def integrate_g_safe_inspect(g, Ep, Eq, Ermx, resolution):
         # epsabs=0 forces quad to meet the *relative* tolerance: these
         # integrands can be ~1e-20, far below the default epsabs=1.49e-8,
         # so with the default quad accepts its first coarse estimate over
-        # the wide window without ever subdividing around the narrow peak
-        ans = integrate.quad(g, minx, maxx, args = (Ep,Eq,), epsabs=0, limit=200)
+        # the wide window without ever subdividing around the narrow peak.
+        # epsrel=1e-12 (vs the 1.49e-8 default) so this reference is
+        # guaranteed tighter than the ~1e-12 accuracy of the windowed
+        # Fortran integration it validates, rather than only typically so
+        ans = integrate.quad(g, minx, maxx, args = (Ep,Eq,), epsabs=0, epsrel=1e-12, limit=200)
         peak_info_array[jdx]["integral"] = ans[0]
         peak_info_array[jdx]["error"] = ans[1]
         

@@ -55,12 +55,12 @@ Both write their chi-square histograms to `figures/chisquare_nr_simulator.png` a
 
 ```
 # smoke test: 100 throws, 64 bins
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 100 64   # ~25 min
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 100 64   # ~15 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 100 64   # ~1 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 100 64   # ~1 min
 
 # full validation: 10,000 throws, 400 bins
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 10000    # ~70 min
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    # ~120 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 10000    # ~7 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    # ~11 min
 ```
 
 (Timings measured with 18 workers under x86 emulation on an Apple Silicon Mac; native x86 hardware should be faster.)
