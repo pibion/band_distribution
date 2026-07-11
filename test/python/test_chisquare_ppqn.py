@@ -18,7 +18,9 @@ Identical in structure to test_chisquare_gaussian.py, but:
   miss the peak.
 
 Run from the repository root with:
-  LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py [n_throws]
+  LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py [n_throws] [n_bins]
+
+n_throws defaults to 100,000 and n_bins to 64.
 """
 
 import hashlib
@@ -63,7 +65,7 @@ EQ_RANGE = (0.75, 250.0)
 # ---------------------------------------------------------------------------
 N_EVENTS        = 1_000     # events per chi-square throw
 N_THROWS        = int(sys.argv[1]) if len(sys.argv) > 1 else 100_000
-N_BINS          = 64        # equibin target bins
+N_BINS          = int(sys.argv[2]) if len(sys.argv) > 2 else 64   # equibin target bins
 CELLS_PER_SIGMA = 6.0       # sampling-grid cells per local band width
 N_WORKERS       = os.cpu_count()
 PPQN_GRID_CACHE = REPO_ROOT / "ppqn_vertex_grid.npz"
@@ -225,6 +227,7 @@ ax.text(0.97, 0.97, stats_text, transform=ax.transAxes,
 
 ax.legend()
 fig.tight_layout()
+os.makedirs(REPO_ROOT / "figures", exist_ok=True)
 outfile = REPO_ROOT / "figures" / "chisquare_ppqn.png"
 fig.savefig(outfile, dpi=150)
 print(f"\nPlot saved to {outfile}")

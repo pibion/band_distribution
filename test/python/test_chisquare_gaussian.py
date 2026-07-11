@@ -25,6 +25,7 @@ Run with:
   python test/python/test_chisquare_gaussian.py
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -128,6 +129,7 @@ ax.text(0.97, 0.97, stats_text, transform=ax.transAxes,
 
 ax.legend()
 fig.tight_layout()
+os.makedirs(REPO_ROOT / "figures", exist_ok=True)
 outfile = REPO_ROOT / "figures" / "chisquare_gaussian.png"
 fig.savefig(outfile, dpi=150)
 print(f"\nPlot saved to {outfile}")

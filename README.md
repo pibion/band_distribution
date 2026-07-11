@@ -1,7 +1,7 @@
 This code is useful for dark matter searches where detector output is Ep (total phonon energy) and Eq (total charge energy).  The point of the code is to provide the probability of an (Ep, Eq) pair given a set of detector parameters for both electron recoils (`PpqG`, where the G is for gamma because gammas are the cause of most electron recoils) and neutron recoils (`PpqN`, where the N is for neutron).
 
 
-## Building and testing with the Fortran Package Manager (`fpm`)
+# Building and testing with the Fortran Package Manager (`fpm`)
 
 This project uses the Fortran Package Manager (fpm).  You'll need to install that to build this project; please see https://fpm.fortran-lang.org/install/index.html#install for instructions on installing fpm on your system.  Currently (Nov 2025), building from source will install version 0.14 while installing the package via e.g. `conda` will install version 0.12.
 
@@ -14,7 +14,7 @@ The code parallelizes its integration loops with `do concurrent` using locality 
 |LLVM  | 22              | `fpm test --compiler flang --profile release --flag "-O3 -fopenmp -fdo-concurrent-to-openmp=host"`                                         |
 
 Notes:
-* GNU: gfortran has no option for mapping `do concurrent` onto threads (the auto-parallelizer in `-ftree-parallelize-loops` cannot parallelize these loops because they contain function calls), so the band integrals run **serially** in gfortran builds — measured at 1.0 effective threads vs 17.6 for ifx on the same machine, making per-event likelihood evaluation ~10x slower.  The gfortran build is fine for verifying the physics and the Python interface, but use ifx or flang for production likelihood work (MCMC).
+* GNU: gfortran has no option for mapping `do concurrent` onto threads (the auto-parallelizer in `-ftree-parallelize-loops` cannot parallelize these loops because they contain function calls), so the band integrals run **serially** in gfortran builds — measured at 1.0 effective threads vs 17.6 for ifx on the same machine, making per-event likelihood evaluation ~25x slower there (roughly the core count times a ~1.5x per-core gap from the vector math library).  The gfortran build is fine for verifying the physics and the Python interface, but use ifx or flang for production likelihood work (MCMC).
 * Intel: the shared library must also be linked against the Intel OpenMP runtime for the Python ctypes interface to work; the Intel container does this by setting `FPM_LDFLAGS="-liomp5"`.  The `-fpp -DHAVE_MULTI_IMAGE_SUPPORT=0` flags are for the Julienne dependency.  `-qopenmp` maps `do concurrent` onto the OpenMP thread pool.
 * LLVM: the compiler is invoked as `flang` (the `flang-new` name was dropped in LLVM 20).  `-fdo-concurrent-to-openmp=host` is what parallelizes the `do concurrent` loops; without it they compile to serial loops.  The LLVM container sets `FPM_LDFLAGS="-fopenmp"` so the shared library links against `libomp`.  Intel and LLVM builds benchmark identically (~6 us per event in vector mode on 18 emulated cores).
 
@@ -33,18 +33,24 @@ LD_LIBRARY_PATH=lib python test/python/test_PpqFort_vectorFuncs.py
 
 (`LD_LIBRARY_PATH=lib` is needed when running outside the docker containers, which set it in their environment.)
 
-## Chi-square validation tests
+# PDF self-consistency tests
 These verify that data sampled from the PDFs produces Pearson chi-square values that follow the theoretical chi2(n_bins − 1) distribution.  Reference plots are committed in `figures/`.
 
 ```
-python test/python/verify_sample_from_pdf.py                       # sampler moment checks (~1 min)
+python test/python/verify_sample_from_pdf.py                       # sampler moment checks (~2 s)
 python test/python/test_chisquare_gaussian.py                      # analytic Gaussian PDF (~2 min)
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py      # Fortran PpqN PDF (~1 hr first run)
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py      # Fortran PpqN PDF (~2 min first run)
 ```
 
-`test_chisquare_ppqn.py` caches its PDF grid evaluation in `ppqn_vertex_grid.npz` (not committed); the first run takes ~20 minutes to build it, subsequent runs reuse it.  Pass an integer argument to reduce the number of throws for a quick smoke test, e.g. `... test_chisquare_ppqn.py 2000`.
+`test_chisquare_ppqn.py` takes the same two optional positional arguments as the simulator tests below: `n_throws` (default 100,000) and `n_bins` (default 64).  For a quick smoke test with fewer throws, run
 
-### Physics-simulator validation tests
+```
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py 2000 64
+```
+
+It caches its PDF grid evaluation in `ppqn_vertex_grid.npz` (not committed) and reuses it on later runs.
+
+# Physics-simulator validation tests
 The tests above only check that the PDFs are *self-consistent* (samples drawn from a PDF match that same PDF).  The two tests below are the stronger check: they generate events from an independent physics simulator (`python/generate_events.py`, which draws Er from the recoil spectrum, N from a truncated normal, and applies detector resolution) and compare the binned counts against the Fortran PDFs.  A pass means the Fortran `PpqN` / `PpqG` implementations correctly describe the physics.
 
 ```
@@ -66,18 +72,18 @@ LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    #
 
 (Timings measured with 18 workers under x86 emulation on an Apple Silicon Mac; native x86 hardware should be faster.)
 
-## Performance notes
-`PpqN` / `PpqG` integrate over a window placed around the located peak(s) of the Er integrand rather than sampling the full physical range, evaluating at roughly 6 microseconds per (Ep, Eq) point in vector mode (18 threads under x86 emulation; measured via `PpqN_vector` over a representative grid).  For likelihood loops (e.g. MCMC):
-
-* Call the vectorized entry points (`PpqN_vector` / `PpqG_vector`) with all events in one call — the parallelism lives there, and per-event scalar calls pay OpenMP fork/join overhead instead.
-* **Shuffle the event array once at load time if it is ordered.**  The vector loops split the events into one contiguous chunk per thread (static scheduling), and the loop only finishes when the slowest chunk does.  Per-event cost varies several-fold across the (Ep, Eq) plane — deep-tail events short-circuit in ~2 us while on-band events cost ~10-15 us — so an energy-ordered array hands some threads chunks of expensive events while others idle at the barrier.  Shuffling gives every chunk a similar cost mix and measured 8-15% faster than energy-ordered input.  The result is identical either way, and if your events are already in effectively random order this changes nothing.
-
 To run inside the Intel docker container, mount the repository's `figures/` directory so the plot survives the container:
 
 ```
 docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
     bash --login -c "conda activate band && python /app/test/python/test_chisquare_nr_simulator.py 100 64"
 ```
+
+# Performance notes
+`PpqN` / `PpqG` integrate over a window placed around the located peak(s) of the Er integrand rather than sampling the full physical range, evaluating at roughly 6 microseconds per (Ep, Eq) point in vector mode (18 threads under x86 emulation; measured via `PpqN_vector` over a representative grid).  For likelihood loops (e.g. MCMC):
+
+* Call the vectorized entry points (`PpqN_vector` / `PpqG_vector`) with all events in one call — the parallelism lives there, and per-event scalar calls pay OpenMP fork/join overhead instead.
+* **Shuffle the event array once at load time if it is ordered.**  The vector loops split the events into one contiguous chunk per thread (static scheduling), and the loop only finishes when the slowest chunk does.  Per-event cost varies several-fold across the (Ep, Eq) plane — deep-tail events short-circuit in ~2 us while on-band events cost ~10-15 us — so an energy-ordered array hands some threads chunks of expensive events while others idle at the barrier.  Shuffling gives every chunk a similar cost mix and measured 8-15% faster than energy-ordered input.  The result is identical either way, and if your events are already in effectively random order this changes nothing.
 
 # Build the singularity/apptainer container for HPC submissions
 There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  
@@ -106,20 +112,13 @@ Now you have a docker container that contains the fortran binary, but this is no
 apptainer build band.sif docker-daemon://band:latest
 ```
 
-# Use the docker container for local development
-For local development, you most likely want the files available to you in a way that persists once you close the container.  In this case you need to supply arguments to `docker run` that mount the top-level directory:
-
-```
-docker run -it --mount type=bind,src=.,dst=/app --entrypoint=/bin/bash band
-```
-
 # Build the docker container for running Jupyter and interacting with notebooks
 
 ```
 docker build --rm -f Dockerfile_jupyter -t band_jupyter .
 ```
 
-# Run the jupyter container
+## Run the jupyter container
 You can issue this command from any directory.  Note the absolute path names for mounting the volume.  This enables your work to persist!  You will need to replace `/mnt/c/Users/canto/Repositories/nrFanoII` with the path to your repository directory.  You should leave `home/jovyan/work/nrFano` the same.  Note that this command refers to the nrFanoII repository, which uses this (band_distribution) repository.
 
 ```
@@ -127,6 +126,13 @@ docker run -it --rm -p 8888:8888 -v /mnt/c/Users/canto/Repositories/nrFanoII:/ho
 ```
 
 In notebooks, select the **Python (band)** kernel — it runs in the `band` conda environment (built from `environment.yaml`, the same environment used by the other containers), which has the compiled library's runtime dependencies and all the python packages.
+
+# Use the docker container for local development
+For local development, you most likely want the files available to you in a way that persists once you close the container.  In this case you need to supply arguments to `docker run` that mount the top-level directory:
+
+```
+docker run -it --mount type=bind,src=.,dst=/app --entrypoint=/bin/bash band
+```
 
 # Profiling with TAU
 TAU is built into `Dockerfile_tau_intel`. Build that image first:
