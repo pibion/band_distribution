@@ -90,7 +90,20 @@ contains
       res = sqrt(q0**2 + e2pre * e2e)
   end procedure sigq
 
+  ! The bind(c) module procedures cannot themselves be elemental, so the
+  ! spectrum formulas live in elemental implementations that array-valued
+  ! internal code (the mode scan) can evaluate in vectorizable form.
   module procedure PErN
+      res = PErN_impl(Er)
+  end procedure PErN
+
+  module procedure PErG
+      res = PErG_impl(Er)
+  end procedure PErG
+
+  elemental function PErN_impl(Er) result(res)
+      real(c_double), intent(in) :: Er
+      real(c_double) :: res
       real(c_double), parameter :: PNa = 0.53693208d0
       real(c_double), parameter :: PNb = 6.41515782d0
       real(c_double), parameter :: PNd = 23.71789286d0
@@ -98,9 +111,11 @@ contains
       real(c_double), parameter :: one_minus_PNa_over_PNd = (1.0d0 - PNa) / PNd
 
       res = PNa_over_PNb * exp(-Er / PNb) + one_minus_PNa_over_PNd * exp(-Er / PNd)
-  end procedure PErN
+  end function PErN_impl
 
-  module procedure PErG
+  elemental function PErG_impl(Er) result(res)
+      real(c_double), intent(in) :: Er
+      real(c_double) :: res
       real(c_double), parameter :: PGa = 0.573211975d0
       real(c_double), parameter :: PGb = 0.169520023d0
       real(c_double), parameter :: PGd = 279.552394d0
@@ -108,7 +123,7 @@ contains
       real(c_double), parameter :: one_minus_PGa_over_PGd = (1.0d0 - PGa) / PGd
 
       res = PGa_over_PGb * exp(-Er / PGb) + one_minus_PGa_over_PGd * exp(-Er / PGd)
-  end procedure PErG
+  end function PErG_impl
 
   ! PpqFullN: integrand for the Er integral, P(Ep,Eq|Er)*P(Er), NR case.
   ! Evaluates the N integral numerically via 21-point Simpson's rule.
@@ -132,8 +147,8 @@ contains
       real(c_double) :: EP_mean, EQ_mean, sigp_mean_sq, sigq_mean_sq
       real(c_double) :: a_coeff, b_coeff, N_star, sigma_Neff
       real(c_double) :: N_lo, N_hi, h_N
-      real(c_double) :: N_j, EP_nl, EQ_nl, sig_p, sig_q, exp_arg
-      real(c_double) :: integrand_arr(21)
+      real(c_double) :: N_j, EP_nl, EQ_nl, sig_p2, sig_q2
+      real(c_double) :: integrand_arr(21), exp_args(21), inv_sig(21)
       integer :: j
 
       F_val    = F0 + s * Er
@@ -169,22 +184,28 @@ contains
           N_hi = N_star + 5.0d0 * sigma_Neff
       end if
       h_N = (N_hi - N_lo) / 20.0d0
+      ! Two branch-free loops so both SIMD-vectorize (a single loop with
+      ! a conditional exp defeats the auto-vectorizer).  No underflow
+      ! guard is needed: exp_arg <= 0 by construction and exp underflows
+      ! smoothly to zero for very negative arguments, which is exactly
+      ! the behaviour the old skip-below--700 branch hand-coded.  With
+      ! the integration window centred on the peak, nearly every point
+      ! is within 8 sigma anyway.
       do j = 1, 21
           N_j   = N_lo + (j - 1) * h_N
           EP_nl = Er + (V * 1.0d-3) * N_j
           EQ_nl = eps * N_j
-          sig_p = sqrt(sp0 + sp1 * EP_nl**2)
-          sig_q = sqrt(sq0 + sq1 * EQ_nl**2)
-          exp_arg = -0.5d0*((Ep - EP_nl)/sig_p)**2 &
-                    - 0.5d0*((Eq - EQ_nl)/sig_q)**2 &
-                    - 0.5d0*((N_j - Nbar_val)/sigma_N)**2
-          if (exp_arg < -700.0d0) then
-              integrand_arr(j) = 0.0d0
-          else
-              integrand_arr(j) = norm_const / (sigma_N * sig_p * sig_q) * exp(exp_arg)
-          end if
+          sig_p2 = sp0 + sp1 * EP_nl**2
+          sig_q2 = sq0 + sq1 * EQ_nl**2
+          inv_sig(j) = 1.0d0 / sqrt(sig_p2 * sig_q2)
+          exp_args(j) = -0.5d0*(Ep - EP_nl)**2/sig_p2 &
+                        - 0.5d0*(Eq - EQ_nl)**2/sig_q2 &
+                        - 0.5d0*((N_j - Nbar_val)/sigma_N)**2
       end do
-      res = (h_N / 3.0d0) * dot_product(simps_w, integrand_arr)
+      do j = 1, 21
+          integrand_arr(j) = exp(exp_args(j)) * inv_sig(j)
+      end do
+      res = (norm_const / sigma_N) * (h_N / 3.0d0) * dot_product(simps_w, integrand_arr)
   end function PpqCondN
 
   ! The full integrand P(Ep,Eq|Er)*P(Er) with the spectrum selected by
@@ -202,40 +223,49 @@ contains
       end if
   end function band_integrand
 
-  ! Closed-form approximation to log of the Er integrand: complete the
-  ! square in N analytically (with sigp/sigq frozen at the measured
-  ! energies) and add the log recoil spectrum.  Not accurate enough for
+  ! Closed-form approximation to log of the Er integrand WITHOUT the
+  ! recoil spectrum: complete the square in N analytically, with
+  ! sigp/sigq frozen at the measured energies.  Not accurate enough for
   ! the PDF value itself -- the real integrand evaluates sigp/sigq at
   ! noiseless energies -- but the peak location and curvature agree to
   ! well within a fraction of the peak width, which is all the window
   ! placement needs.
+  !
+  ! Branch-free on purpose: the validity guards are computed with
+  ! clamped-safe values and applied with merge (a blend, not a branch)
+  ! so the mode scan's array evaluation vectorizes cleanly.
+  elemental function log_band_exponent(Er, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2) result(H)
+      real(c_double), intent(in) :: Er, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2
+      real(c_double) :: H
+      real(c_double) :: Er_s, F_s, Nbar_s, aN, bN, cN
+      logical :: valid
+
+      Er_s   = max(Er, 1.0d-30)
+      F_s    = max(F0 + s * Er_s, 1.0d-30)
+      Nbar_s = max(a * Er_s**b * Er_s / eps, 1.0d-30)
+      valid  = Er > 0.0d0 .and. F0 + s * Er > 0.0d0 .and. a > 0.0d0
+
+      aN = (V * 1.0d-3) * (Ep - Er_s) / sp2 + eps * Eq / sq2 + 1.0d0 / F_s
+      bN = 1.0d0 / (2.0d0 * Nbar_s * F_s) + eps**2 / (2.0d0 * sq2) &
+         + V**2 / (2.0d0 * 1.0d6 * sp2)
+      cN = -(Ep - Er_s)**2 / (2.0d0 * sp2) - Eq**2 / (2.0d0 * sq2) &
+         - Nbar_s / (2.0d0 * F_s)
+      H = merge(cN + aN**2 / (4.0d0 * bN), -1.0d30, valid)
+  end function log_band_exponent
+
+  ! Scalar convenience for the Newton refinement: band exponent plus the
+  ! log recoil spectrum.
   pure function log_integrand_approx(Er, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma) result(H)
       real(c_double), intent(in) :: Er, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2
       logical, intent(in) :: is_gamma
       real(c_double) :: H
-      real(c_double) :: F_val, Nbar_val, aN, bN, cN, spec
 
-      if (Er <= 0.0d0) then
-          H = -1.0d30
-          return
-      end if
-      F_val    = F0 + s * Er
-      Nbar_val = a * Er**b * Er / eps
-      if (Nbar_val <= 0.0d0 .or. F_val <= 0.0d0) then
-          H = -1.0d30
-          return
-      end if
-      aN = (V * 1.0d-3) * (Ep - Er) / sp2 + eps * Eq / sq2 + 1.0d0 / F_val
-      bN = 1.0d0 / (2.0d0 * Nbar_val * F_val) + eps**2 / (2.0d0 * sq2) &
-         + V**2 / (2.0d0 * 1.0d6 * sp2)
-      cN = -(Ep - Er)**2 / (2.0d0 * sp2) - Eq**2 / (2.0d0 * sq2) &
-         - Nbar_val / (2.0d0 * F_val)
+      H = log_band_exponent(Er, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2)
       if (is_gamma) then
-          spec = PErG(Er)
+          H = H + log(PErG_impl(Er))
       else
-          spec = PErN(Er)
+          H = H + log(PErN_impl(Er))
       end if
-      H = cN + aN**2 / (4.0d0 * bN) + log(spec)
   end function log_integrand_approx
 
   ! Locate every mode of the Er integrand and estimate their widths.
@@ -273,8 +303,16 @@ contains
       dlx = (log(maxx_scan) - log(x_scan_min)) / (n_scan - 1)
       do k = 1, n_scan
           xs(k) = exp(log(x_scan_min) + (k - 1) * dlx)
-          Hs(k) = log_integrand_approx(xs(k), Ep, Eq, a, b, F0, s, eps, V, sp2, sq2, is_gamma)
       end do
+      ! Branch-free band exponent over the whole grid, then the log
+      ! spectrum as a second array pass with the band choice hoisted out
+      ! of the loop: everything the scan does is vectorizable.
+      Hs = log_band_exponent(xs, Ep, Eq, a, b, F0, s, eps, V, sp2, sq2)
+      if (is_gamma) then
+          Hs = Hs + log(PErG_impl(xs))
+      else
+          Hs = Hs + log(PErN_impl(xs))
+      end if
 
       ! Candidate local maxima (including the low-Er boundary)
       ncand = 0
