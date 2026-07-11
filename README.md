@@ -59,11 +59,17 @@ LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 100 64   #
 LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 100 64   # ~1 min
 
 # full validation: 10,000 throws, 400 bins
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 10000    # ~7 min
-LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    # ~11 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 10000    # ~4 min
+LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    # ~5 min
 ```
 
 (Timings measured with 18 workers under x86 emulation on an Apple Silicon Mac; native x86 hardware should be faster.)
+
+## Performance notes
+`PpqN` / `PpqG` integrate over a window placed around the located peak(s) of the Er integrand rather than sampling the full physical range, evaluating at roughly 6 microseconds per (Ep, Eq) point in vector mode (18 threads under x86 emulation; measured via `PpqN_vector` over a representative grid).  For likelihood loops (e.g. MCMC):
+
+* Call the vectorized entry points (`PpqN_vector` / `PpqG_vector`) with all events in one call — the parallelism lives there, and per-event scalar calls pay OpenMP fork/join overhead instead.
+* **Shuffle the event array once at load time if it is ordered.**  The vector loops split the events into one contiguous chunk per thread (static scheduling), and the loop only finishes when the slowest chunk does.  Per-event cost varies several-fold across the (Ep, Eq) plane — deep-tail events short-circuit in ~2 us while on-band events cost ~10-15 us — so an energy-ordered array hands some threads chunks of expensive events while others idle at the barrier.  Shuffling gives every chunk a similar cost mix and measured 8-15% faster than energy-ordered input.  The result is identical either way, and if your events are already in effectively random order this changes nothing.
 
 To run inside the Intel docker container, mount the repository's `figures/` directory so the plot survives the container:
 

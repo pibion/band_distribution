@@ -30,7 +30,7 @@ Approximate wall times (18 workers, x86 emulation on an Apple Silicon Mac;
 native x86 hardware should be faster):
 
     n_throws=100,   n_bins=64   ~ 1 min   (smoke test)
-    n_throws=10000, n_bins=400  ~ 7 min   (full validation)
+    n_throws=10000, n_bins=400  ~ 4 min   (full validation)
 """
 
 import os
