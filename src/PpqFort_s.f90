@@ -1,10 +1,19 @@
 submodule(PpqFort_m) PpqFort_s
   implicit none
 
-  ! Simpson 1/3 weights for 21 equally-spaced points
-  real(c_double), parameter :: simps_w(21) = &
-      [1.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, &
-       4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 1.0d0]
+  ! Number of composite Simpson 1/3 points for the N integral (must be odd)
+  integer, parameter :: n_quad_N = 21
+
+  ! Simpson 1/3 weights: 1, 4, 2, 4, ..., 2, 4, 1
+  real(c_double), parameter :: simps_w(n_quad_N) = &
+      [1.0d0, (merge(4.0d0, 2.0d0, mod(j_w, 2) == 0), integer :: j_w = 2, n_quad_N - 1), 1.0d0]
+
+  ! Cap on the number of Er sample points in any one integration piece.
+  ! Protects against point-count blow-up when a window's step comes from
+  ! a mode much narrower than the window it ends up in (e.g. after
+  ! merging): 20,000 uniform points are denser than the old full-range
+  ! 0.01 keV grid for any piece narrower than 200 keV.
+  integer, parameter :: max_pts = 20000
 
   ! Lower edge of the Er integration domain (keV)
   real(c_double), parameter :: er_min = 1.0d-6
@@ -148,7 +157,7 @@ contains
       real(c_double) :: a_coeff, b_coeff, N_star, sigma_Neff
       real(c_double) :: N_lo, N_hi, h_N
       real(c_double) :: N_j, EP_nl, EQ_nl, sig_p2, sig_q2
-      real(c_double) :: integrand_arr(21), exp_args(21), inv_sig(21)
+      real(c_double) :: integrand_arr(n_quad_N), exp_args(n_quad_N), inv_sig(n_quad_N)
       integer :: j
 
       F_val    = F0 + s * Er
@@ -183,7 +192,7 @@ contains
           N_lo = N_star - 5.0d0 * sigma_Neff
           N_hi = N_star + 5.0d0 * sigma_Neff
       end if
-      h_N = (N_hi - N_lo) / 20.0d0
+      h_N = (N_hi - N_lo) / real(n_quad_N - 1, c_double)
       ! Two branch-free loops so both SIMD-vectorize (a single loop with
       ! a conditional exp defeats the auto-vectorizer).  No underflow
       ! guard is needed: exp_arg <= 0 by construction and exp underflows
@@ -191,7 +200,7 @@ contains
       ! the behaviour the old skip-below--700 branch hand-coded.  With
       ! the integration window centred on the peak, nearly every point
       ! is within 8 sigma anyway.
-      do j = 1, 21
+      do j = 1, n_quad_N
           N_j   = N_lo + (j - 1) * h_N
           EP_nl = Er + (V * 1.0d-3) * N_j
           EQ_nl = eps * N_j
@@ -202,7 +211,7 @@ contains
                         - 0.5d0*(Eq - EQ_nl)**2/sig_q2 &
                         - 0.5d0*((N_j - Nbar_val)/sigma_N)**2
       end do
-      do j = 1, 21
+      do j = 1, n_quad_N
           integrand_arr(j) = exp(exp_args(j)) * inv_sig(j)
       end do
       res = (norm_const / sigma_N) * (h_N / 3.0d0) * dot_product(simps_w, integrand_arr)
@@ -390,6 +399,20 @@ contains
           bnd_m(n_modes) = .false.
       end do refine_candidates
 
+      if (n_modes == 0) then
+          ! Every candidate failed to refine (pathological closed-form
+          ! shapes far off band).  Accept the tallest scan point with a
+          ! conservative width -- the local scan spacing -- and let the
+          ! edge guard grow the window as needed.  Far cheaper than the
+          ! full-range-grid fallback this used to trigger.
+          k = cand(1)
+          n_modes  = 1
+          er_m(1)  = xs(k)
+          sig_m(1) = max(xs(min(k + 1, n_scan)) - xs(max(k - 1, 1)), 1.0d-3)
+          H_m(1)   = Hs(k)
+          bnd_m(1) = .false.
+      end if
+
   contains
 
       pure subroutine newton_refine(xx, converged, H1_out, H2_out)
@@ -448,6 +471,45 @@ contains
       total = total * h
   end function integrate_window
 
+  ! Integrate one window, refining the sampling step only over the part
+  ! of the window that overlaps the sharp low-Er component of the gamma
+  ! spectrum (decay length PGb).  The two pieces share their split point,
+  ! whose two trapezoid half-weights sum to the exact union.
+  pure function integrate_piecewise(lo, hi, h_target, Ep, Eq, a, b, F0, s, eps, V, &
+                                    p0, p10, q0, q10, is_gamma) result(total)
+      real(c_double), intent(in) :: lo, hi, h_target, Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
+      logical, intent(in) :: is_gamma
+      real(c_double) :: total
+      real(c_double), parameter :: spike_edge = 5.0d0 * PGb_scale
+      real(c_double) :: h_fine
+
+      if (is_gamma .and. lo < spike_edge) then
+          h_fine = min(h_target, PGb_scale / 6.0d0)
+          if (hi > spike_edge) then
+              total = one_piece(lo, spike_edge, h_fine) + one_piece(spike_edge, hi, h_target)
+          else
+              total = one_piece(lo, hi, h_fine)
+          end if
+      else
+          total = one_piece(lo, hi, h_target)
+      end if
+
+  contains
+
+      pure function one_piece(p_lo, p_hi, p_ht) result(piece)
+          real(c_double), intent(in) :: p_lo, p_hi, p_ht
+          real(c_double) :: piece
+          integer :: npts
+          real(c_double) :: h
+
+          npts  = min(max(int((p_hi - p_lo) / p_ht) + 2, 25), max_pts)
+          h     = (p_hi - p_lo) / (npts - 1)
+          piece = integrate_window(p_lo, h, npts, Ep, Eq, a, b, F0, s, eps, V, &
+                                   p0, p10, q0, q10, is_gamma)
+      end function one_piece
+
+  end function integrate_piecewise
+
   ! Shared driver for PpqN / PpqG: locate every integrand mode, place an
   ! integration window around each, merge overlapping windows, and guard
   ! the window edges.
@@ -455,13 +517,11 @@ contains
       real(c_double), intent(in) :: Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10
       logical, intent(in) :: is_gamma
       real(c_double) :: res
-
-      integer, parameter :: max_pts = 200000
       real(c_double) :: sp2, sq2, maxx_scan, resolution
       real(c_double) :: er_m(max_modes), sig_m(max_modes), H_m(max_modes)
       logical :: bnd_m(max_modes)
       real(c_double) :: w_lo(max_modes), w_hi(max_modes), w_ht(max_modes), w_sig(max_modes)
-      real(c_double) :: h, f_star, f_lo, f_hi, lo_limit, hi_limit, tmp
+      real(c_double) :: f_star, f_lo, f_hi, lo_limit, hi_limit, tmp
       integer :: n_modes, n_win, m, j, npts, guard
       logical :: need_lo, need_hi
 
@@ -540,10 +600,6 @@ contains
 
       res = 0.0d0
       do m = 1, n_win
-          ! Resolve the sharp low-Er component of the gamma spectrum when
-          ! the window reaches down into it
-          if (is_gamma .and. w_lo(m) < 5.0d0 * PGb_scale) w_ht(m) = min(w_ht(m), PGb_scale / 6.0d0)
-
           ! Guard expansions must not cross into neighbouring windows:
           ! adjacent edges share a point, whose two half-weights sum to
           ! the full trapezoid weight of the union.
@@ -554,10 +610,8 @@ contains
           w_lo(m) = max(w_lo(m), lo_limit)
 
           do guard = 1, 4
-              npts = min(max(int((w_hi(m) - w_lo(m)) / w_ht(m)) + 2, 25), max_pts)
-              h    = (w_hi(m) - w_lo(m)) / (npts - 1)
-              tmp  = integrate_window(w_lo(m), h, npts, Ep, Eq, a, b, F0, s, eps, V, &
-                                      p0, p10, q0, q10, is_gamma)
+              tmp = integrate_piecewise(w_lo(m), w_hi(m), w_ht(m), Ep, Eq, a, b, F0, s, &
+                                        eps, V, p0, p10, q0, q10, is_gamma)
               ! Edge guard: expand if the integrand has not died off at the
               ! window edges (protects against an underestimated sigma)
               f_lo = band_integrand(w_lo(m), Ep, Eq, a, b, F0, s, eps, V, p0, p10, q0, q10, is_gamma)
