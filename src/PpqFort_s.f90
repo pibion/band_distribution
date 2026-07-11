@@ -1,12 +1,19 @@
 submodule(PpqFort_m) PpqFort_s
   implicit none
 
-  ! Number of composite Simpson 1/3 points for the N integral (must be odd)
+  ! Number of composite Simpson 1/3 points for the N integral (must be
+  ! odd).  If this changes, update the simps_w weights below to match:
+  ! the pattern is 1, 4, 2, 4, ..., 2, 4, 1.  (Generating the weights
+  ! from n_quad_N with a typed implied-do is F2018 that gfortran 15
+  ! does not yet parse.)  21 points reproduce adaptive quadrature to
+  ! ~1e-12; 15 points are ~25% faster at ~4e-5 relative error, too
+  ! coarse for likelihood work.
   integer, parameter :: n_quad_N = 21
 
-  ! Simpson 1/3 weights: 1, 4, 2, 4, ..., 2, 4, 1
+  ! Simpson 1/3 weights, matching n_quad_N
   real(c_double), parameter :: simps_w(n_quad_N) = &
-      [1.0d0, (merge(4.0d0, 2.0d0, mod(j_w, 2) == 0), integer :: j_w = 2, n_quad_N - 1), 1.0d0]
+      [1.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, &
+       4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 2.0d0, 4.0d0, 1.0d0]
 
   ! Cap on the number of Er sample points in any one integration piece.
   ! Protects against point-count blow-up when a window's step comes from
