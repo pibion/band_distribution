@@ -50,6 +50,8 @@ LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py 2000 64
 
 It caches its PDF grid evaluation in `ppqn_vertex_grid.npz` (not committed) and reuses it on later runs.
 
+The `test_chisquare_ppqn.py` timing assumes an ifx or flang build; gfortran builds run the band integrals serially (see the compiler notes above) and take correspondingly longer.
+
 # Physics-simulator validation tests
 The tests above only check that the PDFs are *self-consistent* (samples drawn from a PDF match that same PDF).  The two tests below are the stronger check: they generate events from an independent physics simulator (`python/generate_events.py`, which draws Er from the recoil spectrum, N from a truncated normal, and applies detector resolution) and compare the binned counts against the Fortran PDFs.  A pass means the Fortran `PpqN` / `PpqG` implementations correctly describe the physics.
 
@@ -70,7 +72,7 @@ LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py 10000    #
 LD_LIBRARY_PATH=lib python test/python/test_chisquare_er_simulator.py 10000    # ~5 min
 ```
 
-(Timings measured with 18 workers under x86 emulation on an Apple Silicon Mac; native x86 hardware should be faster.)
+(Timings measured with the ifx build, 18 workers, under x86 emulation on an Apple Silicon Mac; native x86 hardware should be faster.  gfortran builds run the band integrals serially and will be dramatically slower here — use ifx or flang.)
 
 To run inside the Intel docker container, mount the repository's `figures/` directory so the plot survives the container:
 
@@ -80,7 +82,7 @@ docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
 ```
 
 # Performance notes
-`PpqN` / `PpqG` integrate over a window placed around the located peak(s) of the Er integrand rather than sampling the full physical range, evaluating at roughly 6 microseconds per (Ep, Eq) point in vector mode (18 threads under x86 emulation; measured via `PpqN_vector` over a representative grid).  For likelihood loops (e.g. MCMC):
+`PpqN` / `PpqG` integrate over a window placed around the located peak(s) of the Er integrand rather than sampling the full physical range, evaluating at roughly 6 microseconds per (Ep, Eq) point in vector mode (18 threads under x86 emulation; measured via `PpqN_vector` over a representative grid).  This number assumes an ifx or flang build — gfortran builds run the band integrals serially and are ~25x slower (see the compiler notes at the top).  For likelihood loops (e.g. MCMC):
 
 * Call the vectorized entry points (`PpqN_vector` / `PpqG_vector`) with all events in one call — the parallelism lives there, and per-event scalar calls pay OpenMP fork/join overhead instead.
 * **Shuffle the event array once at load time if it is ordered.**  The vector loops split the events into one contiguous chunk per thread (static scheduling), and the loop only finishes when the slowest chunk does.  Per-event cost varies several-fold across the (Ep, Eq) plane — deep-tail events short-circuit in ~2 us while on-band events cost ~10-15 us — so an energy-ordered array hands some threads chunks of expensive events while others idle at the barrier.  Shuffling gives every chunk a similar cost mix and measured 8-15% faster than energy-ordered input.  The result is identical either way, and if your events are already in effectively random order this changes nothing.
@@ -88,11 +90,11 @@ docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
 # Build the singularity/apptainer container for HPC submissions
 There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  
 
-|Vendor| Dockerfile name     |
-|------|---------------------|
-|GNU   | Dockerfile_gfortran | 
-|Intel | Dockerfile_intel    | 
-|LLVM  | Dockerfile_llvm     |
+|Vendor| Dockerfile name     | Notes |
+|------|---------------------|-------|
+|GNU   | Dockerfile_gfortran | Verification only: gfortran runs the band integrals serially, ~25x slower than ifx/flang (see the compiler notes above) |
+|Intel | Dockerfile_intel    | Recommended for production likelihood work (MCMC) |
+|LLVM  | Dockerfile_llvm     | Same performance as the Intel build |
 
 Choose which compiler you want, determine the name of the dockerfile, and then issue the following command:
 
