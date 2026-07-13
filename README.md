@@ -5,7 +5,7 @@ This code is useful for dark matter searches where detector output is Ep (total 
 
 This project uses the Fortran Package Manager (fpm).  You'll need to install that to build this project; please see https://fpm.fortran-lang.org/install/index.html#install for instructions on installing fpm on your system.  Currently (Nov 2025), building from source will install version 0.14 while installing the package via e.g. `conda` will install version 0.12.
 
-The code parallelizes its integration loops with `do concurrent` using locality specifiers, including the Fortran 2023 `reduce` clause.  This is a hard requirement — there is no serial fallback — so you need a recent compiler.  The versions below have been verified via the docker containers in this repository:
+The code parallelizes its integration loops with `do concurrent` using locality specifiers, including the Fortran 2023 `reduce` clause, so you need a recent compiler.  The versions below have been verified via the docker containers in this repository:
 
 |Vendor| Version(s)      |  Build/Test Command                                                                                                                        |
 |------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------|
@@ -14,12 +14,26 @@ The code parallelizes its integration loops with `do concurrent` using locality 
 |LLVM  | 22              | `fpm test --compiler flang --profile release --flag "-O3 -fopenmp -fdo-concurrent-to-openmp=host"`                                         |
 
 Notes:
-* GNU: gfortran has no option for mapping `do concurrent` onto threads (the auto-parallelizer in `-ftree-parallelize-loops` cannot parallelize these loops because they contain function calls), so the band integrals run **serially** in gfortran builds — measured at 1.0 effective threads vs 17.6 for ifx on the same machine, making per-event likelihood evaluation ~25x slower there (roughly the core count times a ~1.5x per-core gap from the vector math library).  The gfortran build is fine for verifying the physics and the Python interface, but use ifx or flang for production likelihood work (MCMC).
+* GNU: gfortran is slow.  It has no option for mapping `do concurrent` onto threads (the auto-parallelizer in `-ftree-parallelize-loops` cannot parallelize these loops because they contain function calls), so the band integrals run **serially** in gfortran builds — measured at 1.0 effective threads vs 17.6 for ifx on the same machine, making per-event likelihood evaluation ~25x slower there (roughly the core count times a ~1.5x per-core gap from the vector math library).  The gfortran build is fine for verifying the physics and the Python interface, but use ifx or flang for production likelihood work (MCMC).
 * Intel: the shared library must also be linked against the Intel OpenMP runtime for the Python ctypes interface to work; the Intel container does this by setting `FPM_LDFLAGS="-liomp5"`.  The `-fpp -DHAVE_MULTI_IMAGE_SUPPORT=0` flags are for the Julienne dependency.  `-qopenmp` maps `do concurrent` onto the OpenMP thread pool.
-* LLVM: the compiler is invoked as `flang` (the `flang-new` name was dropped in LLVM 20).  `-fdo-concurrent-to-openmp=host` is what parallelizes the `do concurrent` loops; without it they compile to serial loops.  The LLVM container sets `FPM_LDFLAGS="-fopenmp"` so the shared library links against `libomp`.  Intel and LLVM builds benchmark identically (~6 us per event in vector mode on 18 emulated cores).
+* LLVM: the compiler is invoked as `flang`.  `-fdo-concurrent-to-openmp=host` is what parallelizes the `do concurrent` loops; without it they compile to serial loops.  The LLVM container sets `FPM_LDFLAGS="-fopenmp"` so the shared library links against `libomp`.  Intel and LLVM builds benchmark identically (~6 us per event in vector mode on 18 emulated cores).
+
+## Building the shared library for the python interface
+The python wrappers load `lib/libband_distribution.so`, which `fpm install` builds and places under the repository root.  Use the same flags as the test commands above; for Intel and LLVM, `FPM_LDFLAGS` must also be set so the *shared library* links its OpenMP runtime — without it the library builds but fails to load from python with undefined `__kmpc_*` symbols:
+
+```
+# Intel
+FPM_LDFLAGS="-liomp5" fpm install --prefix=. --compiler ifx --profile release --flag "-fpp -O3 -qopenmp -DHAVE_MULTI_IMAGE_SUPPORT=0"
+
+# LLVM
+FPM_LDFLAGS="-fopenmp" fpm install --prefix=. --compiler flang --profile release --flag "-O3 -fopenmp -fdo-concurrent-to-openmp=host"
+
+# GNU (verification only — see the notes above)
+fpm install --prefix=. --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
+```
 
 # Testing the python calls
-This code builds a library that may be called within python (this is the original intent of the code).  The python test scripts live in `test/python/` and should be run from the repository root.  To test the python calls, run
+This code builds a library that may be called within python (this is the original intent of the code).  Build and install the shared library first (see "Building the shared library for the python interface" above).  The python test scripts live in `test/python/` and should be run from the repository root.  To test the python calls, run
 
 ```
 LD_LIBRARY_PATH=lib python test/python/test_PpqFort.py
@@ -92,8 +106,8 @@ There are multiple Dockerfiles, each building the code with a compiler from a di
 
 |Vendor| Dockerfile name     | Notes |
 |------|---------------------|-------|
-|GNU   | Dockerfile_gfortran | Verification only: gfortran runs the band integrals serially, ~25x slower than ifx/flang (see the compiler notes above) |
-|Intel | Dockerfile_intel    | Recommended for production likelihood work (MCMC) |
+|GNU   | Dockerfile_gfortran | Slow: gfortran runs the band integrals serially, ~25x slower than ifx/flang (see the compiler notes above) |
+|Intel | Dockerfile_intel    | Recommended for work that needs speed |
 |LLVM  | Dockerfile_llvm     | Same performance as the Intel build |
 
 Choose which compiler you want, determine the name of the dockerfile, and then issue the following command:
@@ -137,7 +151,7 @@ docker run -it --mount type=bind,src=.,dst=/app --entrypoint=/bin/bash band
 ```
 
 # Profiling with TAU
-TAU is built into `Dockerfile_tau_intel`. Build that image first:
+TAU is built into `Dockerfile_tau_intel`. This image uses the ifx compiler because that comipler is the easiest to install outside a Docker container.  Build that image first:
 
 ```
 docker build -f Dockerfile_tau_intel -t tau_intel .
