@@ -338,57 +338,54 @@ def integrate_g_safe_inspect(g, Ep, Eq, Ermx, resolution):
         pass
         # print ("The maximum value is ", g(Ermx, Ep, Eq))
 
-    er_arr = np.arange(minx, maxx, resolution / 2)
-    er_integrand_arr = np.zeros(np.size(er_arr))
-    for idx, er in enumerate(er_arr):
-        val = g(er, Ep, Eq)
-        er_integrand_arr[idx] = val
-    #print ("are any of the values non-zero? ", np.where(er_integrand_arr > 0))
+    # Scan the integrand on a uniform grid.  If it is still non-zero
+    # near the end of the scan range, extend the range and re-scan the
+    # whole grid, so that all group indices below refer to one
+    # consistent array.
+    scan_min = minx
+    while True:
+        er_arr = np.arange(scan_min, maxx, resolution / 2)
+        er_integrand_arr = np.zeros(np.size(er_arr))
+        for idx, er in enumerate(er_arr):
+            er_integrand_arr[idx] = g(er, Ep, Eq)
+        nonZero_idx = np.where(er_integrand_arr > 0)[0]
+        if len(nonZero_idx) == 0 or nonZero_idx[-1] + 5 < len(er_arr) - 1:
+            break
+        maxx = 1.5 * maxx
 
-    # we expect a structure that is peaks, surrounded by zeros
-    nonZero_idx = np.where(er_integrand_arr > 0)[0]
+    if len(nonZero_idx) == 0:
+        # the peak is narrower than the scan step and fell between grid
+        # points; integrate around the known maximum instead
+        val, err = integrate.quad(g, er_arr[0], er_arr[-1], args=(Ep, Eq),
+                                  points=[Ermx], epsabs=0, epsrel=1e-12,
+                                  limit=200)
+        peak_info = {"minx": er_arr[0], "maxx": er_arr[-1],
+                     "integral": val, "error": err,
+                     "width": np.nan, "Ermx": Ermx, "integrand_max": np.nan}
+        return (val, err), (er_arr, er_integrand_arr), [peak_info]
+
+    # We expect a structure of peaks surrounded by zeros: group the
+    # consecutive non-zero samples and pad each group's range by 5 grid
+    # points on both sides.
     nonZero_idx_groups = consecutive(nonZero_idx)
 
     peak_info_array = []
-
     for peak_idx in nonZero_idx_groups:
-        while True:
-            min_idx = max(0, min(peak_idx) - 5)
-            max_idx = min(np.size(er_integrand_arr) - 1, max(peak_idx) + 5)
+        min_idx = max(0, min(peak_idx) - 5)
+        max_idx = min(np.size(er_integrand_arr) - 1, max(peak_idx) + 5)
+        peak_info_array.append({"minx": er_arr[min_idx],
+                                "maxx": er_arr[max_idx]})
 
-            minx = er_arr[min_idx]
-            maxx = er_arr[max_idx]
-
-            # if the value array looks like 0 0 0 4.5 6.7 8 9 10.5 5 1 0 0 0 0 
-            # then the peak_idx array will look like 3 4 5 6 7 8 9
-            # and the max_idx will be less than the size of er_integrand_arr
-            # if this is the case then we don't to expand the limits
-            # because the upper limit already goes past the place where the integrand
-            # drops to zero
-            if max_idx < np.size(er_integrand_arr) - 1:
-                break
-            else:
-                #print ("Expanding the upper limit")
-                maxx = 1.5*maxx
-
-                er_arr = np.arange(minx, maxx, resolution / 2)
-                er_integrand_arr = np.zeros(np.size(er_arr))
-                for idx, er in enumerate(er_arr):
-                    val = g(er, Ep, Eq)
-                    er_integrand_arr[idx] = val
-            
-                peak_idx = np.where(er_integrand_arr > 0)[0]
-
-        # if we've broken out of the loop, we have our minx and maxx
-        # for this peak
-        peak_info_array.append({"minx": minx, "maxx": maxx})
-
-    # print(peak_info_array)
-    # if there are two peak ranges, check that they are distinct
-    if len(peak_info_array) > 1:
-        if peak_info_array[0]['maxx'] > peak_info_array[1]['minx']:
-            # the peak ranges are overlapping, you should remove the first one
-            peak_info_array.pop(0)
+    # Merge overlapping ranges (union), so that quad below neither
+    # double-counts the overlap nor drops a peak.  The groups are in
+    # ascending Er order by construction.
+    merged = [peak_info_array[0]]
+    for peak_info in peak_info_array[1:]:
+        if peak_info["minx"] <= merged[-1]["maxx"]:
+            merged[-1]["maxx"] = max(merged[-1]["maxx"], peak_info["maxx"])
+        else:
+            merged.append(peak_info)
+    peak_info_array = merged
 
     # Integrate using quad now that you have accurate limits
     for jdx, peak_info in enumerate(peak_info_array):
