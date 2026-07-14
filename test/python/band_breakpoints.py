@@ -17,8 +17,8 @@ The fix is quad's `points=` argument: telling the inner (Eq) quadrature
 where the ridge is forces a subdivision there, so the peak cannot be
 missed.  This module computes those breakpoints from the band physics.
 
-The physics
------------
+The physics: where the ridge is
+-------------------------------
 A recoil of true energy Er produces (noiselessly)
 
     N  = Y(Er) * Er / eps          e/h pairs, so
@@ -27,17 +27,47 @@ A recoil of true energy Er produces (noiselessly)
        = Er * (1 + Y(Er) * V / (1000 * eps))   (phonon + Neganov-Luke)
 
 with Y(Er) = a * Er**b for nuclear recoils and Y = 1 for electron
-recoils.  Eliminating Er gives the band centroid: the most probable Eq
-at a given measured Ep.  Both Ep(Er) and Eq(Er) are monotone, so the
-centroid is tabulated on an Er grid once and inverted by interpolation.
+recoils.  These are parametric equations for the band centroid: each Er
+gives one point (Ep(Er), Eq(Er)) on the ridge.  We need the centroid in
+the form "most probable Eq at a given Ep" — that direction because the
+harness's *inner* quadrature runs over Eq at fixed Ep, so the
+breakpoints must be Eq values.  Ep(Er) = ep cannot be solved for Er
+algebraically (Y makes it transcendental), but both Ep(Er) and Eq(Er)
+are monotone in Er, so the centroid is tabulated on an Er grid once and
+np.interp(ep, ep_tab, eq_tab) performs the inversion: find where the
+table's Ep equals ep, read off the Eq at the same Er.
 
-The band's local width in Eq at fixed Ep combines the charge resolution
-with the phonon resolution mapped through the ridge slope:
+The geometry: how wide the ridge is
+-----------------------------------
+The breakpoints must bracket the peak, so we need the band's local
+width in the Eq direction at fixed measured Ep.  Picture the band as a
+tilted ridge in the (Ep, Eq) plane and slice it vertically at ep.  Two
+independent noise sources spread events along that vertical slice:
+
+* Charge noise smears Eq directly: a vertical spread of sigq.
+* Phonon noise smears the measured Ep, i.e. it displaces events
+  *horizontally*.  An event that landed in the slice because its Ep
+  fluctuated by delta really belongs to a ridge point whose Eq differs
+  by (dEq_ridge/dEp) * delta — so horizontal noise, viewed through the
+  tilt of the band, appears as a vertical spread of slope * sigp.  A
+  flat band gets no vertical smearing from phonon noise; a steep band
+  gets a lot.
+
+The two contributions are independent Gaussians, so they add in
+quadrature (np.hypot is sqrt(a^2 + b^2), written that way only for
+numerical safety):
 
     width(Ep) = sqrt( sigq(Eq_ridge)^2 + (dEq_ridge/dEp * sigp(Ep))^2 )
 
-The breakpoints handed to the harness are the ridge center and a window
-of +/- 10 local widths around it; the harness clips them to each bin.
+with the slope taken by central finite difference of the interpolated
+ridge.  This width ignores the Fano broadening (the spread in N), which
+is harmless here: the breakpoints sit at ridge +/- 10 widths, so even a
+substantially underestimated width still brackets the whole peak, and
+the adaptive quadrature does the accurate work inside the bracket.
+
+The breakpoints handed to the harness are the ridge center and the
+window of +/- 10 local widths around it; the harness clips them to
+each bin.
 """
 
 import os
