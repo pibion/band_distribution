@@ -5,7 +5,7 @@ import os
 
 repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Path to the directory containing PpqDist_v6.py
+# Path to the directory containing pq_dist_v8.py
 module_dir = os.path.join(repo_root, 'python')
 sys.path.append(module_dir)
 
