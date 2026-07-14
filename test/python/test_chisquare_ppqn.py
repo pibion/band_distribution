@@ -37,7 +37,9 @@ import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "python"))
+import pq_dist_v8 as ppq
 import sample_from_pdf as spdf
+from band_breakpoints import make_ridge_breakpoints
 from chisquare_harness import run_chisquare_test
 from ppqfort_pdf import make_ppqn_pdf
 
@@ -71,40 +73,20 @@ N_WORKERS       = os.cpu_count()
 PPQN_GRID_CACHE = REPO_ROOT / "ppqn_vertex_grid.npz"
 
 # ---------------------------------------------------------------------------
-# Detector resolution functions (same formulas as the Fortran sigp/sigq);
-# used for the feature-scaled grid edges and the ridge breakpoints.
+# Detector resolutions (from the python reference implementation), used
+# for the feature-scaled grid edges; band-ridge breakpoints for the
+# per-bin quadrature come from band_breakpoints.py.
 # ---------------------------------------------------------------------------
 def sigp(ep):
-    e2e = (ep / (10.0 * (1.0 + PARAMS["V"] / PARAMS["eps"] / 1000.0))) ** 2
-    return np.sqrt(PARAMS["p0"] ** 2 + (PARAMS["p10"] ** 2 - PARAMS["p0"] ** 2) * e2e)
+    return ppq.sigp(ep, eps=PARAMS["eps"], V=PARAMS["V"],
+                    p0=PARAMS["p0"], p10=PARAMS["p10"])
 
 def sigq(eq):
-    e2e = (eq / 10.0) ** 2
-    return np.sqrt(PARAMS["q0"] ** 2 + (PARAMS["q10"] ** 2 - PARAMS["q0"] ** 2) * e2e)
+    return ppq.sigq(eq, q0=PARAMS["q0"], q10=PARAMS["q10"])
 
-# ---------------------------------------------------------------------------
-# Band ridge: most probable Eq at given Ep.
-# Neganov-Luke: Ep = Er * (1 + Y(Er) * V / (1000 * eps)),  Eq = Y(Er) * Er.
-# Tabulate Er -> (Ep, Eq) once and interpolate.
-# ---------------------------------------------------------------------------
-_er_tab = np.geomspace(1e-3, 700.0, 4000)
-_y_tab  = PARAMS["a"] * _er_tab ** PARAMS["b"]
-_ep_tab = _er_tab * (1.0 + _y_tab * PARAMS["V"] / (1000.0 * PARAMS["eps"]))
-_eq_tab = _y_tab * _er_tab
-
-def eq_ridge(ep):
-    return np.interp(ep, _ep_tab, _eq_tab)
-
-def ridge_breakpoints(ep, ymin, ymax):
-    """Eq breakpoints for the inner quadrature: ridge center and a window
-    of +-10 local band widths around it (the harness clips to the bin)."""
-    eqr = float(eq_ridge(ep))
-    # band width in Eq at fixed Ep: charge resolution plus the phonon
-    # resolution mapped through the local ridge slope
-    dep = max(1e-3, 0.01 * ep)
-    slope = (float(eq_ridge(ep + dep)) - float(eq_ridge(ep - dep))) / (2 * dep)
-    width = np.hypot(float(sigq(eqr)), slope * float(sigp(ep)))
-    return [eqr - 10.0 * width, eqr, eqr + 10.0 * width]
+ridge_breakpoints = make_ridge_breakpoints(
+    "NR", a=PARAMS["a"], b=PARAMS["b"], eps=PARAMS["eps"], V=PARAMS["V"],
+    p0=PARAMS["p0"], p10=PARAMS["p10"], q0=PARAMS["q0"], q10=PARAMS["q10"])
 
 # ---------------------------------------------------------------------------
 # Build (or load) the sampling grid

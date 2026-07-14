@@ -47,6 +47,7 @@ import matplotlib.pyplot as plt
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "python"))
 
+from band_breakpoints import make_ridge_breakpoints
 from generate_events import generate_ER_events
 from ppqfort_pdf import make_ppqg_pdf
 from chisquare_harness import run_chisquare_test
@@ -138,6 +139,12 @@ chi2_vals, dof, bins, expected = run_chisquare_test(
     n_events   = N_EVENTS,
     n_throws   = N_THROWS,
     n_bins     = N_BINS,
+    # band-ridge breakpoints keep the per-bin quadrature from missing
+    # the narrow band inside wide (tail) bins; see band_breakpoints.py
+    inner_points_func = make_ridge_breakpoints(
+        "ER", eps=PARAMS["eps"], V=PARAMS["V"],
+        p0=PARAMS["p0"], p10=PARAMS["p10"],
+        q0=PARAMS["q0"], q10=PARAMS["q10"]),
     n_workers  = N_WORKERS,
     batch_size = 50,
     seed       = 42,

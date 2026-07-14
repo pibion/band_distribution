@@ -19,8 +19,9 @@ import numpy as np
 from scipy.stats import truncnorm
 import sys, os
 
-sys.path.insert(0, os.path.dirname(__file__))
-import pq_dist_v6 as ppq
+# Y, sigp, sigq come from the validated python reference implementation
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
+import pq_dist_v8 as ppq
 
 
 def _sample_PErN(n, rng, PNa=0.53693208, PNb=6.41515782, PNd=23.71789286):
