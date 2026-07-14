@@ -47,6 +47,8 @@ LD_LIBRARY_PATH=lib python test/python/test_PpqFort_vectorFuncs.py
 
 (`LD_LIBRARY_PATH=lib` is needed when running outside the docker containers, which set it in their environment.)
 
+See `test/python/README.md` for a map of the test scripts and their supporting modules, including where the PDF-over-bin integration lives.
+
 # PDF self-consistency tests
 These verify that data sampled from the PDFs produces Pearson chi-square values that follow the theoretical chi2(n_bins − 1) distribution.  Reference plots are committed in `figures/`.
 
@@ -67,7 +69,7 @@ It caches its PDF grid evaluation in `ppqn_vertex_grid.npz` (not committed) and 
 The `test_chisquare_ppqn.py` timing assumes an ifx or flang build; gfortran builds run the band integrals serially (see the compiler notes above) and take correspondingly longer.
 
 # Physics-simulator validation tests
-The tests above only check that the PDFs are *self-consistent* (samples drawn from a PDF match that same PDF).  The two tests below are the stronger check: they generate events from an independent physics simulator (`python/generate_events.py`, which draws Er from the recoil spectrum, N from a truncated normal, and applies detector resolution) and compare the binned counts against the Fortran PDFs.  A pass means the Fortran `PpqN` / `PpqG` implementations correctly describe the physics.
+The tests above only check that the PDFs are *self-consistent* (samples drawn from a PDF match that same PDF).  The two tests below are the stronger check: they generate events from an independent physics simulator (`test/python/generate_events.py`, which draws Er from the recoil spectrum, N from a truncated normal, and applies detector resolution) and compare the binned counts against the Fortran PDFs.  A pass means the Fortran `PpqN` / `PpqG` implementations correctly describe the physics.
 
 ```
 LD_LIBRARY_PATH=lib python test/python/test_chisquare_nr_simulator.py [n_throws] [n_bins]   # NR band vs PpqN

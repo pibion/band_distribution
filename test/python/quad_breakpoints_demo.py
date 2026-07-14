@@ -31,7 +31,8 @@ This script demonstrates the failure and the fix in two steps:
      bin" problem: a narrow ridge in y whose center y0(x) drifts with
      x, integrated with a nested quad(quad(...)) over an (x, y) box.
      This is the same technique used in this repo's
-     python/chisquare_harness.py (see `inner_points_func`).
+     chisquare_harness.py in this directory (see `inner_points_func`),
+     with the band-specific breakpoints built in band_breakpoints.py.
 
 No threads, no external dependencies beyond numpy/scipy.
 """
