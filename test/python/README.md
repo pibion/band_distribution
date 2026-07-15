@@ -14,7 +14,6 @@ build `lib/libband_distribution.so` first.
 | `test_PpqFort.py` | Fortran functions against the python reference implementation, one value at a time (machine-precision parity). |
 | `test_PpqFort_vectorFuncs.py` | The vectorized `PpqN_vector` / `PpqG_vector` entry points. |
 | `verify_sample_from_pdf.py` | Moments of the grid sampler used by the self-consistency tests. |
-| `test_chisquare_gaussian.py` | The chi-square harness itself, against an analytic 2D Gaussian (no Fortran involved). |
 | `test_chisquare_ppqn.py` | Self-consistency: events sampled *from* the Fortran `PpqN` follow `PpqN`. |
 | `test_chisquare_nr_simulator.py` | Physics: events from the independent NR simulator follow the Fortran `PpqN`. |
 | `test_chisquare_er_simulator.py` | Physics: events from the independent ER simulator follow the Fortran `PpqG`. |
@@ -28,7 +27,7 @@ detector response — so agreement means the PDFs describe the physics.
 
 | Module | Role |
 |--------|------|
-| `chisquare_harness.py` | PDF-agnostic machinery: equibin binning, expected counts by per-bin quadrature, batched chi-square throws. |
+| `chisquare_harness.py` | PDF-agnostic machinery: equibin binning, expected counts by per-bin quadrature, batched chi-square throws.  Every band PDF here is a narrow ridge, so the per-bin quadrature requires an `inner_points_func` (breakpoints). |
 | `band_breakpoints.py` | Band physics for the per-bin quadrature: where the band ridge is and how wide it is, packaged as breakpoints for the harness. |
 | `generate_events.py` | The independent physics simulator (truth generator) for the two simulator tests. |
 | `sample_from_pdf.py` | Grid-based sampling from an arbitrary PDF (lintsampler), used by the self-consistency tests. |
@@ -51,5 +50,5 @@ Suggested reading order:
    amplification, inverted to give the most probable Eq at each Ep, plus
    the local band width setting the breakpoint window.
 3. `chisquare_harness.py`, `expected_counts_from_pdf` — the nested
-   quadrature that consumes those breakpoints (`inner_points_func`) and
+   quadrature that requires those breakpoints (`inner_points_func`) and
    normalizes the per-bin integrals into expected counts.

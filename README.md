@@ -54,7 +54,6 @@ These verify that data sampled from the PDFs produces Pearson chi-square values 
 
 ```
 python test/python/verify_sample_from_pdf.py                       # sampler moment checks (~2 s)
-python test/python/test_chisquare_gaussian.py                      # analytic Gaussian PDF (~2 min)
 LD_LIBRARY_PATH=lib python test/python/test_chisquare_ppqn.py      # Fortran PpqN PDF (~2 min first run)
 ```
 
