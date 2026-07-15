@@ -17,6 +17,13 @@ Workflow
 The harness is PDF-agnostic: supply any pdf_func(Ep_flat, Eq_flat) ->
 values_flat callable and a matching sampler(n_events, seed=None) ->
 (Ep, Eq) callable.
+
+Step 2's per-bin quadrature also requires an inner_points_func giving
+the band-ridge breakpoints (see band_breakpoints.py); every PDF this
+harness is used with in this repo is a narrow ridge, for which plain
+adaptive quadrature over a wide bin can silently return ~0 (see
+quad_breakpoints_demo.py), so there is no "skip the breakpoints"
+option.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -30,8 +37,8 @@ from scipy.integrate import quad
 # Expected counts from the PDF
 # ---------------------------------------------------------------------------
 
-def expected_counts_from_pdf(pdf_func, bins, n_events, *,
-                             inner_points_func=None, n_workers=1):
+def expected_counts_from_pdf(pdf_func, bins, n_events, inner_points_func, *,
+                             n_workers=1):
     """
     Integrate pdf_func over each bin rectangle using adaptive quadrature
     (scipy quad over Ep, nested quad over Eq).
@@ -44,14 +51,20 @@ def expected_counts_from_pdf(pdf_func, bins, n_events, *,
         Bin definitions from equibin.BinningResult.bins.
     n_events : int
         Events per throw; scales the returned expected counts.
-    inner_points_func : callable or None
-        Optional inner_points_func(ep, ymin, ymax) -> sequence of Eq
-        breakpoints strictly inside (ymin, ymax).  Adaptive quadrature
-        starts from a fixed set of sample points, so a PDF that is a
-        narrow ridge inside a wide bin can be missed entirely on the
-        first pass; supplying the ridge location as breakpoints forces
-        the quadrature to subdivide there.  Not needed for PDFs whose
-        features are wide compared to the bins.
+    inner_points_func : callable
+        inner_points_func(ep, ymin, ymax) -> sequence of Eq breakpoints.
+        The band PDFs in this repo are narrow ridges: plain adaptive
+        quadrature starts from a fixed set of sample points, so a bin
+        wider than the ridge can have every sample point land in the
+        ~zero region on both sides and quad will confidently report a
+        ~zero integral without ever subdividing toward the peak (see
+        quad_breakpoints_demo.py).  Passing the ridge location as a
+        breakpoint forces a subdivision there, so this argument is
+        required rather than optional -- there is no PDF in this repo
+        for which skipping it is safe.  Breakpoints outside (ymin, ymax)
+        are dropped; an empty result for a bin is fine (scipy's
+        points-based quadrature handles zero real breakpoints exactly
+        like plain adaptive quadrature).
     n_workers : int
         Threads used to integrate bins concurrently.  Only helps when
         pdf_func releases the GIL (e.g. calls into a compiled library).
@@ -68,11 +81,8 @@ def expected_counts_from_pdf(pdf_func, bins, n_events, *,
             return float(pdf_func(np.array([ep]), np.array([eq]))[0])
 
         def inner(ep):
-            pts = None
-            if inner_points_func is not None:
-                pts = [p for p in inner_points_func(ep, ymin, ymax)
-                       if ymin < p < ymax]
-                pts = sorted(pts) or None
+            pts = sorted(p for p in inner_points_func(ep, ymin, ymax)
+                        if ymin < p < ymax)
             val, _ = quad(integrand, ymin, ymax, args=(ep,),
                           points=pts, limit=200)
             return val
@@ -98,8 +108,8 @@ def expected_counts_from_pdf(pdf_func, bins, n_events, *,
 # ---------------------------------------------------------------------------
 
 def run_chisquare_test(pdf_func, sampler_func, ep_range, eq_range,
-                       n_events, n_throws, n_bins,
-                       *, n_ref=None, inner_points_func=None, n_workers=1,
+                       n_events, n_throws, n_bins, inner_points_func,
+                       *, n_ref=None, n_workers=1,
                        batch_size=5_000, seed=0):
     """
     Run a chi-square distribution test for a 2D PDF.
@@ -119,11 +129,12 @@ def run_chisquare_test(pdf_func, sampler_func, ep_range, eq_range,
         Total number of chi-square values to compute (e.g. 100_000).
     n_bins : int
         Target number of equibin bins.
+    inner_points_func : callable
+        Passed to expected_counts_from_pdf; see its docstring for why
+        this is required rather than optional.
     n_ref : int or None
         Reference dataset size for computing bin boundaries.
         Defaults to max(50 * n_bins, 5 * n_events).
-    inner_points_func : callable or None
-        Passed to expected_counts_from_pdf; see its docstring.
     n_workers : int
         Threads for the expected-count integration.
     batch_size : int
@@ -171,8 +182,7 @@ def run_chisquare_test(pdf_func, sampler_func, ep_range, eq_range,
     print(f"Integrating PDF over {n_bins_actual} bins "
           f"(adaptive quadrature, {n_workers} workers)...")
     expected = expected_counts_from_pdf(
-        pdf_func, bins, n_events,
-        inner_points_func=inner_points_func, n_workers=n_workers,
+        pdf_func, bins, n_events, inner_points_func, n_workers=n_workers,
     )
 
     # --- step 3: batched chi-square throws ---

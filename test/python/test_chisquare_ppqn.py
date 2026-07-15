@@ -1,7 +1,9 @@
 """
 Chi-square distribution test for the Fortran PpqN (nuclear-recoil band) PDF.
 
-Identical in structure to test_chisquare_gaussian.py, but:
+Uses chisquare_harness.run_chisquare_test (equibin bins, PDF-integrated
+expected counts, batched chi-square throws; see that module's
+docstring for the general workflow).  Specific to this test:
 
 - The PDF comes from lib/libband_distribution.so via python/ppqfort_pdf.py
   (threaded chunked PpqN_vector calls).
