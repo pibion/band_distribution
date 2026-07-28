@@ -27,11 +27,12 @@ detector response — so agreement means the PDFs describe the physics.
 
 | Module | Role |
 |--------|------|
-| `chisquare_harness.py` | PDF-agnostic machinery: equibin binning, expected counts by per-bin quadrature, batched chi-square throws.  Every band PDF here is a narrow ridge, so the per-bin quadrature requires an `inner_points_func` (breakpoints). |
+| `chisquare_harness.py` | PDF-agnostic machinery: equibin binning, expected counts by per-bin quadrature, batched chi-square throws, and a `debug_bin` helper for inspecting one bin's integration in isolation.  Every band PDF here is a narrow ridge, so the per-bin quadrature requires an `inner_points_func` (breakpoints). |
 | `band_breakpoints.py` | Band physics for the per-bin quadrature: where the band ridge is and how wide it is, packaged as breakpoints for the harness. |
 | `generate_events.py` | The independent physics simulator (truth generator) for the two simulator tests. |
 | `sample_from_pdf.py` | Grid-based sampling from an arbitrary PDF (lintsampler), used by the self-consistency tests. |
 | `quad_breakpoints_demo.py` | Self-contained demonstration (no repo dependencies) of why adaptive quadrature silently misses narrow peaks and how `points=` fixes it. |
+| `debug_bin_example.py` | Example driver for `chisquare_harness.debug_bin`: point it at one (Ep, Eq) bin and a parameter set to see why that bin's expected count looks the way it does. |
 
 ## Integrating the PDF over bins
 
@@ -52,3 +53,35 @@ Suggested reading order:
 3. `chisquare_harness.py`, `expected_counts_from_pdf` — the nested
    quadrature that requires those breakpoints (`inner_points_func`) and
    normalizes the per-bin integrals into expected counts.
+
+## Debugging a single bin
+
+When a bin's expected count comes out at 0 or suspiciously small, it isn't
+automatically a quadrature bug: a wide tail bin can genuinely sit mostly (or
+entirely) off the band, in which case a tiny expected count is the correct
+answer. `chisquare_harness.debug_bin(pdf_func, bin_rect, inner_points_func)`
+tells the two cases apart by computing the same bin three independent ways:
+
+- **naive** — nested quad with no breakpoints (what you'd get without
+  `inner_points_func`; reproduces the missed-peak failure mode).
+- **fixed** — nested quad with `inner_points_func`, exactly as
+  `expected_counts_from_pdf` computes it.
+- **grid_ref** — a brute-force fixed-grid Simpson integral, independent of
+  quad's adaptive logic entirely.
+
+It also prints where `inner_points_func`'s breakpoints land relative to the
+bin at a few Ep values, flagging when all of them fall outside `[ymin,
+ymax]` — a sign the ridge has drifted off the bin's Eq range there rather
+than quad having missed anything.
+
+If all three numbers agree, the small value is real (the bin is genuinely
+mostly off the ridge). If `naive` disagrees with `fixed`/`grid_ref`, that's
+the silent-miss failure from the "Integrating the PDF over bins" section
+above, on this specific bin.
+
+`debug_bin_example.py` is a ready-to-edit driver: set `BIN` and the
+parameter dict to the case you're chasing and run
+
+```
+LD_LIBRARY_PATH=lib python test/python/debug_bin_example.py
+```

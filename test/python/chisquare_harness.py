@@ -30,7 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import equibin
-from scipy.integrate import quad
+from scipy.integrate import quad, simpson
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +101,116 @@ def expected_counts_from_pdf(pdf_func, bins, n_events, inner_points_func, *,
         raise ValueError("PDF integrates to zero over all bins.")
 
     return n_events * integrals / total
+
+
+# ---------------------------------------------------------------------------
+# Single-bin diagnostics
+# ---------------------------------------------------------------------------
+
+def debug_bin(pdf_func, bin_rect, inner_points_func, *,
+              n_ep_probe=5, n_grid=400):
+    """
+    Diagnose the nested-quadrature integral of pdf_func over one bin.
+
+    Use this when expected_counts_from_pdf reports a ~0 integral for a
+    bin and it's unclear whether that's *physically correct* (the PDF
+    really is negligible there) or a quadrature failure (quad missed
+    the ridge).  It prints, and returns, three independent estimates:
+
+    - naive: nested quad with no breakpoints at all (what you'd get
+      without inner_points_func -- reproduces the failure mode).
+    - fixed: nested quad with inner_points_func, exactly as
+      expected_counts_from_pdf computes it.
+    - grid_ref: a brute-force fixed grid (Simpson's rule in both
+      directions).  This can't miss a feature the grid resolves,
+      independently of quad's adaptive logic entirely, so a disagreement
+      between grid_ref and fixed is a red flag even when breakpoints are
+      in play (e.g. the breakpoint window is too narrow, or the ridge
+      formula doesn't match the PDF being tested).
+
+    It also prints the raw breakpoints inner_points_func returns at a
+    few Ep values spanning the bin, and which of those survive the
+    (ymin, ymax) clip -- if every point is being filtered out, the
+    ridge has drifted entirely outside the bin's Eq range at that Ep,
+    which is the first thing to check for a bin sitting at the edge of
+    the band.
+
+    Parameters
+    ----------
+    pdf_func : callable
+        pdf_func(Ep_flat, Eq_flat) -> values_flat
+    bin_rect : (xmin, xmax, ymin, ymax)
+        The single bin to integrate.
+    inner_points_func : callable or None
+        Same as expected_counts_from_pdf's inner_points_func.  Pass
+        None to see only the naive and grid_ref estimates.
+    n_ep_probe : int
+        Number of Ep values, evenly spaced across the bin, to print
+        breakpoints for.
+    n_grid : int
+        Grid resolution (n_grid x n_grid) for the brute-force reference.
+        Must be fine enough to resolve the narrowest feature of the PDF
+        inside the bin -- if grid_ref itself looks suspicious (e.g. 0
+        when fixed is not), raise this before trusting either estimate.
+
+    Returns
+    -------
+    dict with keys: naive, naive_err, fixed, fixed_err, grid_ref,
+    breakpoints (list of (ep, raw_points, kept_points)).
+    """
+    xmin, xmax, ymin, ymax = bin_rect
+    print(f"bin: Ep in [{xmin}, {xmax}], Eq in [{ymin}, {ymax}]")
+
+    def integrand(eq, ep):
+        return float(pdf_func(np.array([ep]), np.array([eq]))[0])
+
+    def inner(ep, points_func):
+        pts = None
+        if points_func is not None:
+            pts = [p for p in points_func(ep, ymin, ymax) if ymin < p < ymax]
+            pts = sorted(pts) or None
+        return quad(integrand, ymin, ymax, args=(ep,), points=pts, limit=200)
+
+    naive, naive_err = quad(lambda ep: inner(ep, None)[0], xmin, xmax, limit=200)
+    print(f"naive nested quad (no breakpoints) = {naive:.6g}  "
+          f"(outer err est {naive_err:.2g})")
+
+    fixed = fixed_err = None
+    breakpoints_probed = []
+    if inner_points_func is not None:
+        fixed, fixed_err = quad(lambda ep: inner(ep, inner_points_func)[0],
+                                xmin, xmax, limit=200)
+        print(f"nested quad with breakpoints       = {fixed:.6g}  "
+              f"(outer err est {fixed_err:.2g})")
+
+        print(f"\nbreakpoints probed at {n_ep_probe} Ep values across the bin:")
+        for ep in np.linspace(xmin, xmax, n_ep_probe):
+            raw = list(inner_points_func(ep, ymin, ymax))
+            kept = [p for p in raw if ymin < p < ymax]
+            flag = ("  <-- all points fall outside [ymin, ymax]; "
+                     "ridge is off the bin's Eq range at this Ep"
+                     if not kept else "")
+            print(f"  Ep={ep:12.5f}: raw={[round(p, 4) for p in raw]}  "
+                  f"kept={[round(p, 4) for p in kept]}{flag}")
+            breakpoints_probed.append((ep, raw, kept))
+    else:
+        print("no inner_points_func given -- skipping breakpointed quad")
+
+    # Brute-force reference: fixed grid, Simpson in both directions.
+    # Independent of quad's adaptive sampling entirely, so it's the
+    # sanity check of last resort -- but only trustworthy if n_grid
+    # resolves the PDF's narrowest feature inside the bin.
+    ep_grid = np.linspace(xmin, xmax, n_grid)
+    eq_grid = np.linspace(ymin, ymax, n_grid)
+    Ep_g, Eq_g = np.meshgrid(ep_grid, eq_grid, indexing="ij")
+    vals = np.asarray(pdf_func(Ep_g.ravel(), Eq_g.ravel())).reshape(Ep_g.shape)
+    grid_ref = simpson(simpson(vals, x=eq_grid, axis=1), x=ep_grid)
+    print(f"\nbrute-force grid reference ({n_grid}x{n_grid} Simpson) = {grid_ref:.6g}")
+    print("(raise n_grid if this looks suspicious too -- it must resolve")
+    print(" the narrowest feature of the PDF to be trustworthy)")
+
+    return dict(naive=naive, naive_err=naive_err, fixed=fixed, fixed_err=fixed_err,
+                grid_ref=grid_ref, breakpoints=breakpoints_probed)
 
 
 # ---------------------------------------------------------------------------
