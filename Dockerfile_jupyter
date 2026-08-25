@@ -9,6 +9,12 @@ FROM --platform=linux/amd64 quay.io/jupyter/base-notebook
 ENV DEBIAN_FRONTEND=noninteractive
 USER root
 
+# Version of the repository to build: leave unset (default) to build from
+# this local checkout, including any uncommitted changes; set to a tag or
+# commit hash (--build-arg GIT_REF=v0.9.0) to instead clone and check out
+# that exact revision from GitHub, ignoring the local checkout.
+ARG GIT_REF=""
+
 # fix-permissions at the end: under Rosetta emulation (Apple Silicon) the
 # emulator writes $HOME/.cache/rosetta during this root-stage layer, and the
 # image sets HOME=/home/jovyan globally, leaving .cache root-owned and
@@ -38,12 +44,28 @@ RUN mamba env create -f /tmp/environment.yaml && \
 
 WORKDIR /home/${NB_USER}
 
-# Copy the fortran code over
-RUN mkdir src test python
-COPY --chown=${NB_UID}:${NB_GID} src/ src/
-COPY --chown=${NB_UID}:${NB_GID} test/ test/
-COPY --chown=${NB_UID}:${NB_GID} fpm.toml .
-COPY --chown=${NB_UID}:${NB_GID} python/ python/
+# Stage the source: defaults to this local checkout; if GIT_REF is set,
+# the RUN step below discards this and clones that revision instead.
+COPY --chown=${NB_UID}:${NB_GID} src/ /tmp/band_src/src/
+COPY --chown=${NB_UID}:${NB_GID} test/ /tmp/band_src/test/
+COPY --chown=${NB_UID}:${NB_GID} fpm.toml /tmp/band_src/
+COPY --chown=${NB_UID}:${NB_GID} python/ /tmp/band_src/python/
+
+RUN if [ -n "$GIT_REF" ]; then \
+        echo "Building band_distribution @ $GIT_REF (overriding local checkout)" && \
+        rm -rf /tmp/band_src && \
+        git clone https://github.com/pibion/band_distribution.git /tmp/band_src && \
+        cd /tmp/band_src && git checkout "$GIT_REF"; \
+    else \
+        echo "Building band_distribution from the local checkout"; \
+    fi
+
+RUN mkdir -p src test python \
+    && cp -r /tmp/band_src/src/. src/ \
+    && cp -r /tmp/band_src/test/. test/ \
+    && cp -r /tmp/band_src/python/. python/ \
+    && cp /tmp/band_src/fpm.toml . \
+    && rm -rf /tmp/band_src
 
 # Intel runtime libs (libimf.so, libiomp5.so, ...) live in the band env's
 # lib dir; needed when python ctypes loads libband_distribution.so
