@@ -135,7 +135,8 @@ if vertex_values is None:
         elapsed = time.time() - t0
         eta = elapsed / done * (1 - done)
         print(f"  {stop:>9,} / {ep_flat.size:,}  ({100*done:.0f}%, "
-              f"eta {eta/60:.1f} min)", end="\r" if stop < ep_flat.size else "\n")
+              f"eta {eta/60:.1f} min)", end="\r" if stop < ep_flat.size else "\n",
+              flush=True)
     vertex_values = vertex_values.reshape(ep_edges.size, eq_edges.size)
     np.savez_compressed(
         PPQN_GRID_CACHE,

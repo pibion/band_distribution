@@ -326,7 +326,7 @@ def run_chisquare_test(pdf_func, sampler_func, ep_range, eq_range,
         )
 
         pct = 100 * batch_end / n_throws
-        print(f"  {batch_end:>8,} / {n_throws:,}  ({pct:.0f}%)", end="\r")
+        print(f"  {batch_end:>8,} / {n_throws:,}  ({pct:.0f}%)", end="\r", flush=True)
 
     print()
     return chi2_values, n_bins_actual - 1, bins, expected
