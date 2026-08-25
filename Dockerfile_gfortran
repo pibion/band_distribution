@@ -5,6 +5,12 @@ FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Version of the repository to build: leave unset (default) to build from
+# this local checkout, including any uncommitted changes; set to a tag or
+# commit hash (--build-arg GIT_REF=v0.9.0) to instead clone and check out
+# that exact revision from GitHub, ignoring the local checkout.
+ARG GIT_REF=""
+
 # python3-numpy/python3-scipy provide the packages needed by the python
 # test scripts; python-is-python3 lets them be invoked as `python`
 RUN apt-get update && apt-get install -y \
@@ -41,19 +47,28 @@ RUN git clone https://github.com/fortran-lang/fpm \
 
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Copy the fortran code over
-# first we build the expected directory structure
-# and then we copy files
-RUN mkdir /app/src
-RUN mkdir /app/test
+# Stage the source: defaults to this local checkout; if GIT_REF is set,
+# the RUN step below discards this and clones that revision instead.
+COPY src /tmp/band_src/src/
+COPY test /tmp/band_src/test
+COPY fpm.toml /tmp/band_src/
+COPY python /tmp/band_src/python/
 
-COPY src /app/src/
-COPY test /app/test
-COPY fpm.toml /app/
+RUN if [ -n "$GIT_REF" ]; then \
+        echo "Building band_distribution @ $GIT_REF (overriding local checkout)" && \
+        rm -rf /tmp/band_src && \
+        git clone https://github.com/pibion/band_distribution.git /tmp/band_src && \
+        cd /tmp/band_src && git checkout "$GIT_REF"; \
+    else \
+        echo "Building band_distribution from the local checkout"; \
+    fi
 
-# also copy over the python functions for testing
-RUN mkdir /app/python
-COPY python /app/python/
+RUN mkdir -p /app/src /app/test /app/python \
+    && cp -r /tmp/band_src/src/. /app/src/ \
+    && cp -r /tmp/band_src/test/. /app/test/ \
+    && cp -r /tmp/band_src/python/. /app/python/ \
+    && cp /tmp/band_src/fpm.toml /app/ \
+    && rm -rf /tmp/band_src
 
 # Now compile the fortran code
 RUN fpm test --compiler gfortran --profile release --flag "-march=native -fopenmp -ftree-parallelize-loops=4 -fcoarray=single -fPIC"
