@@ -13,10 +13,9 @@ module PpqFort_test_m
   end type
 
   ! Parameters
-  real(c_double), parameter :: a   = 0.16d0
-  real(c_double), parameter :: b   = 0.18d0
+  real(c_double), parameter :: k   = 0.18d0
+  real(c_double), parameter :: Z   = 32.0d0
   real(c_double), parameter :: F0  = 0.122d0
-  real(c_double), parameter :: s   = 0.0d0
   real(c_double), parameter :: eps = 3.0d-3
   real(c_double), parameter :: V   = 3.0d0
   real(c_double), parameter :: p0  = 0.06421907d0
@@ -48,11 +47,11 @@ contains
 
   function check_PpqN_vector() result(test_diagnosis)
     type(test_diagnosis_t) test_diagnosis
-    real(c_double), parameter :: expected_resN(*) = [real(c_double) :: 2.6979836827440D-008, 2.8801096611350D-008, 2.5197301408980D-008]
+    real(c_double), parameter :: expected_resN(*) = [real(c_double) :: 2.0555519070930D-008, 2.2433719405230D-008, 1.8781056966950D-008]
     real(c_double), parameter :: tolerance(*) = expected_resN/100
     real(c_double) resN(size(Eq_arr))
 
-    call PpqN_vector(Ep_arr, Eq_arr, ni, a, b, F0, s, eps, V, p0, p10, q0, q10, resN)
+    call PpqN_vector(Ep_arr, Eq_arr, ni, k, Z, F0, eps, V, p0, p10, q0, q10, resN)
     test_diagnosis =  .all. ( resN .approximates. expected_resN .within. tolerance)  // ' (PpqN)'
   end function
 
@@ -62,7 +61,7 @@ contains
     real(c_double), parameter :: tolerance(*) = expected_resG/100
     real(c_double) resG(size(Eq_arr))
 
-    call PpqG_vector(Ep_arr, Eq_arr, ni, F0, s, eps, V, p0, p10, q0, q10, resG)
+    call PpqG_vector(Ep_arr, Eq_arr, ni, F0, eps, V, p0, p10, q0, q10, resG)
     test_diagnosis =  .all. ( resG .approximates. expected_resG .within. tolerance)  // ' (PpqG)'
   end function
 

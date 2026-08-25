@@ -26,7 +26,7 @@ A recoil of true energy Er produces (noiselessly)
     Ep = Er + (V/1000) * N
        = Er * (1 + Y(Er) * V / (1000 * eps))   (phonon + Neganov-Luke)
 
-with Y(Er) = a * Er**b for nuclear recoils and Y = 1 for electron
+with Y(Er) the Lindhard yield (k, Z) for nuclear recoils and Y = 1 for electron
 recoils.  These are parametric equations for the band centroid: each Er
 gives one point (Ep(Er), Eq(Er)) on the ridge.  We need the centroid in
 the form "most probable Eq at a given Ep" — that direction because the
@@ -76,22 +76,22 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
-import pq_dist_v8 as ppq
+import pq_dist_v9 as ppq
 
 
-def make_ridge_breakpoints(band, *, a=0.16, b=0.18, eps=3.0e-3, V=3.0,
-                           p0=0.06421907, p10=0.48998486,
-                           q0=0.23718488, q10=0.27093151,
-                           er_max=700.0, n_window_widths=10.0):
+def make_ridge_breakpoints(band, *, k, Z, eps, V,
+                           p0, p10,
+                           q0, q10,
+                           er_max, n_window_widths):
     """
     Build an inner_points_func for chisquare_harness.expected_counts_from_pdf.
 
     Parameters
     ----------
     band : "NR" or "ER"
-        Nuclear recoils use the yield model Y(Er) = a * |Er|^b; electron
-        recoils use Y = 1 (the a and b arguments are then ignored).
-    a, b, eps, V, p0, p10, q0, q10 : float
+        Nuclear recoils use the Lindhard yield model Y(Er, k, Z); electron
+        recoils use Y = 1 (the k and Z arguments are then ignored).
+    k, Z, eps, V, p0, p10, q0, q10 : float
         Detector parameters, matching the PDF being integrated.
     er_max : float
         Upper end of the tabulated Er range (keV); must comfortably
@@ -108,16 +108,16 @@ def make_ridge_breakpoints(band, *, a=0.16, b=0.18, eps=3.0e-3, V=3.0,
         harness drops any that fall outside the bin's (ymin, ymax).
     """
     if band == "NR":
-        y_a, y_b = a, b
+        y_tab_func = lambda er_tab: ppq.Y(er_tab, k=k, Z=Z)
     elif band == "ER":
-        y_a, y_b = 1.0, 0.0
+        y_tab_func = lambda er_tab: np.ones_like(er_tab)
     else:
         raise ValueError(f"band must be 'NR' or 'ER', got {band!r}")
 
     # Tabulate the noiseless band centroid Er -> (Ep, Eq) and invert by
     # interpolation (both coordinates are monotone in Er).
     er_tab = np.geomspace(1e-3, er_max, 4000)
-    y_tab = y_a * er_tab ** y_b
+    y_tab = y_tab_func(er_tab)
     ep_tab = er_tab * (1.0 + y_tab * V / (1000.0 * eps))
     eq_tab = y_tab * er_tab
 

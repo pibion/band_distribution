@@ -2,7 +2,7 @@
 
 Everything in this directory validates the band-distribution PDFs; the code
 that *computes* the PDFs lives in `python/` at the repository root
-(`pq_dist_v8.py` for the python reference implementation, `ppqfort_pdf.py`
+(`pq_dist_v9.py` for the python reference implementation, `ppqfort_pdf.py`
 for the wrapper around the compiled Fortran library).  Run all scripts from
 the repository root; see the main README for expected timings and for how to
 build `lib/libband_distribution.so` first.
