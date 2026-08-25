@@ -1,4 +1,9 @@
-FROM quay.io/jupyter/base-notebook
+# Pinned to linux/amd64: this base image is multi-arch, but the
+# environment.yaml installed below pulls the x86_64-only ifx_linux-64
+# conda package.  On an arm64 host (e.g. Apple Silicon) an unpinned
+# `docker build` would pull the arm64 base and then fail to resolve that
+# package.
+FROM --platform=linux/amd64 quay.io/jupyter/base-notebook
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
