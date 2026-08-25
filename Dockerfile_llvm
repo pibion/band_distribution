@@ -1,5 +1,10 @@
-# Use gmao/llvm-flang as base image
-FROM gmao/llvm-flang
+# Use gmao/llvm-flang as base image.  Pinned to linux/amd64: this image
+# currently has no arm64 variant, so an unpinned `docker build` on an
+# arm64 host (e.g. Apple Silicon) happens to already resolve to amd64 --
+# but only by luck, and `docker run` then warns about a platform mismatch
+# every time.  Pinning here makes that explicit and stops depending on the
+# base image staying amd64-only.
+FROM --platform=linux/amd64 gmao/llvm-flang
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive

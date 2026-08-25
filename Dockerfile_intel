@@ -1,5 +1,9 @@
-# Use Ubuntu 24.04 as base image
-FROM ubuntu:24.04
+# Use Ubuntu 24.04 as base image.  Pinned to linux/amd64: ifx and the
+# ifx_linux-64 conda package are x86_64-only, but ubuntu:24.04 is
+# multi-arch, so on an arm64 host (e.g. Apple Silicon) an unpinned `docker
+# build` silently pulls the arm64 variant and the Anaconda installer later
+# crashes trying to unpack an x86_64 payload into it.
+FROM --platform=linux/amd64 ubuntu:24.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
