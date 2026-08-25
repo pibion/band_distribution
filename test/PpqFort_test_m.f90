@@ -39,9 +39,9 @@ contains
     type(test_result_t), allocatable :: test_results(:)
     type(PpqFort_test_t) :: PpqFort_test
 
-    test_results = PpqFort_test%run([ & 
-       test_description_t('computing the resN array', check_PpqG_vector) &
-      ,test_description_t('computing the resG array', check_PpqN_vector) &
+    test_results = PpqFort_test%run([ &
+       test_description_t('computing the resN array', check_PpqN_vector) &
+      ,test_description_t('computing the resG array', check_PpqG_vector) &
     ])
   end function
 
