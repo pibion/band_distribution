@@ -4,10 +4,9 @@ program profile_driver
   implicit none
 
   ! Parameters from test suite
-  real(c_double), parameter :: a   = 0.16d0
-  real(c_double), parameter :: b   = 0.18d0
+  real(c_double), parameter :: k   = 0.18d0
+  real(c_double), parameter :: Z   = 32.0d0
   real(c_double), parameter :: F0  = 0.122d0
-  real(c_double), parameter :: s   = 0.0d0
   real(c_double), parameter :: eps = 3.0d-3
   real(c_double), parameter :: V   = 3.0d0
   real(c_double), parameter :: p0  = 0.06421907d0
@@ -34,7 +33,7 @@ program profile_driver
   ! --- PpqN timing ---
   call system_clock(t_start, t_rate)
   do iter = 1, n_iter
-    call PpqN_vector(Ep_arr, Eq_arr, n, a, b, F0, s, eps, V, p0, p10, q0, q10, resN)
+    call PpqN_vector(Ep_arr, Eq_arr, n, k, Z, F0, eps, V, p0, p10, q0, q10, resN)
   end do
   call system_clock(t_end)
   dummy    = sum(resN)
@@ -47,7 +46,7 @@ program profile_driver
   ! --- PpqG timing ---
   call system_clock(t_start, t_rate)
   do iter = 1, n_iter
-    call PpqG_vector(Ep_arr, Eq_arr, n, F0, s, eps, V, p0, p10, q0, q10, resG)
+    call PpqG_vector(Ep_arr, Eq_arr, n, F0, eps, V, p0, p10, q0, q10, resG)
   end do
   call system_clock(t_end)
   dummy    = sum(resG)

@@ -51,7 +51,7 @@ def _load_library():
 
     _api.PpqN_vector.argtypes = [
         _DOUBLE_ARR, _DOUBLE_ARR, ctypes.c_int,
-        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+        ctypes.c_double, ctypes.c_double, ctypes.c_double,
         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
         ctypes.c_double, ctypes.c_double,
         _DOUBLE_ARR,
@@ -60,23 +60,37 @@ def _load_library():
 
     _api.PpqG_vector.argtypes = [
         _DOUBLE_ARR, _DOUBLE_ARR, ctypes.c_int,
-        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+        ctypes.c_double, ctypes.c_double, ctypes.c_double,
         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
         _DOUBLE_ARR,
     ]
     _api.PpqG_vector.restype = None
 
+    _api.PpqFort_version.argtypes = [
+        ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+    ]
+    _api.PpqFort_version.restype = None
+
     return _api
 
 
-def make_ppqn_pdf(*, a, b, F0, s, eps, V, p0, p10, q0, q10, n_workers=None):
+def version():
+    """Return (major, minor, patch) reported by the loaded shared library."""
+    api = _load_library()
+    major, minor, patch = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+    api.PpqFort_version(ctypes.byref(major), ctypes.byref(minor), ctypes.byref(patch))
+    return (major.value, minor.value, patch.value)
+
+
+def make_ppqn_pdf(*, k, Z, F0, eps, V, p0, p10, q0, q10, n_workers=None):
     """
     Build pdf_func(Ep_flat, Eq_flat) -> values_flat backed by the Fortran
     PpqN (nuclear recoil band PDF).
 
     All physics parameters are required:
-      a, b           : ionization yield  Y(Er) = a * |Er|^b
-      F0, s          : Fano factor       F(Er) = F0 + s * Er
+      k, Z           : Lindhard ionization yield calibration constant and
+                        target atomic number
+      F0             : Fano factor (constant)
       eps            : energy per e/h pair [keV]
       V              : bias voltage [V]
       p0, p10        : phonon resolution parameters
@@ -90,7 +104,7 @@ def make_ppqn_pdf(*, a, b, F0, s, eps, V, p0, p10, q0, q10, n_workers=None):
     api = _load_library()
     if n_workers is None:
         n_workers = os.cpu_count()
-    scalars = (a, b, F0, s, eps, V, p0, p10, q0, q10)
+    scalars = (k, Z, F0, eps, V, p0, p10, q0, q10)
 
     def _eval_chunk(ep, eq, out):
         api.PpqN_vector(ep, eq, ep.size, *scalars, out)
@@ -98,13 +112,13 @@ def make_ppqn_pdf(*, a, b, F0, s, eps, V, p0, p10, q0, q10, n_workers=None):
     return _make_threaded_pdf(_eval_chunk, n_workers)
 
 
-def make_ppqg_pdf(*, F0, s, eps, V, p0, p10, q0, q10, n_workers=None):
+def make_ppqg_pdf(*, F0, eps, V, p0, p10, q0, q10, n_workers=None):
     """Same as make_ppqn_pdf but for the Fortran PpqG (gamma / ER band).
-    The yield is fixed at Y = 1 internally, so a and b are not taken."""
+    The yield is fixed at Y = 1 internally, so k and Z are not taken."""
     api = _load_library()
     if n_workers is None:
         n_workers = os.cpu_count()
-    scalars = (F0, s, eps, V, p0, p10, q0, q10)
+    scalars = (F0, eps, V, p0, p10, q0, q10)
 
     def _eval_chunk(ep, eq, out):
         api.PpqG_vector(ep, eq, ep.size, *scalars, out)

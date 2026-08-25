@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "python"))
-import pq_dist_v8 as ppq
+import pq_dist_v9 as ppq
 import sample_from_pdf as spdf
 from band_breakpoints import make_ridge_breakpoints
 from chisquare_harness import run_chisquare_test
@@ -49,10 +49,9 @@ from ppqfort_pdf import make_ppqn_pdf
 # Physics parameters (all explicit — the Fortran wrapper takes no defaults)
 # ---------------------------------------------------------------------------
 PARAMS = dict(
-    a   = 0.16,         # ionization yield Y(Er) = a * |Er|^b
-    b   = 0.18,
-    F0  = 0.122,        # Fano factor F(Er) = F0 + s*Er
-    s   = 0.0,
+    k   = 0.18,         # Lindhard ionization yield calibration constant
+    Z   = 32.0,         # target atomic number (germanium)
+    F0  = 0.122,        # Fano factor (constant)
     eps = 3.0e-3,       # keV per e/h pair
     V   = 3.0,          # bias voltage [V]
     p0  = 0.06421907,   # phonon resolution
@@ -87,8 +86,9 @@ def sigq(eq):
     return ppq.sigq(eq, q0=PARAMS["q0"], q10=PARAMS["q10"])
 
 ridge_breakpoints = make_ridge_breakpoints(
-    "NR", a=PARAMS["a"], b=PARAMS["b"], eps=PARAMS["eps"], V=PARAMS["V"],
-    p0=PARAMS["p0"], p10=PARAMS["p10"], q0=PARAMS["q0"], q10=PARAMS["q10"])
+    "NR", k=PARAMS["k"], Z=PARAMS["Z"], eps=PARAMS["eps"], V=PARAMS["V"],
+    p0=PARAMS["p0"], p10=PARAMS["p10"], q0=PARAMS["q0"], q10=PARAMS["q10"],
+    er_max=700.0, n_window_widths=10.0)
 
 # ---------------------------------------------------------------------------
 # Build (or load) the sampling grid

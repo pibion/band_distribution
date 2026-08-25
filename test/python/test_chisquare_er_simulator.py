@@ -54,11 +54,10 @@ from chisquare_harness import run_chisquare_test
 
 # ---------------------------------------------------------------------------
 # Physics parameters (from nrFanoII_paper2022/python/detector_params.txt)
-# Electron recoils have ionization yield Y = 1, so no a/b parameters.
+# Electron recoils have ionization yield Y = 1, so no k/Z parameters.
 # ---------------------------------------------------------------------------
 PARAMS = dict(
     F0  = 0.122,
-    s   = 0.0,
     eps = 3.0e-3,
     V   = 3.0,
     p0  = 0.06421907,
@@ -142,9 +141,10 @@ chi2_vals, dof, bins, expected = run_chisquare_test(
     # band-ridge breakpoints keep the per-bin quadrature from missing
     # the narrow band inside wide (tail) bins; see band_breakpoints.py
     inner_points_func = make_ridge_breakpoints(
-        "ER", eps=PARAMS["eps"], V=PARAMS["V"],
+        "ER", k=None, Z=None, eps=PARAMS["eps"], V=PARAMS["V"],
         p0=PARAMS["p0"], p10=PARAMS["p10"],
-        q0=PARAMS["q0"], q10=PARAMS["q10"]),
+        q0=PARAMS["q0"], q10=PARAMS["q10"],
+        er_max=700.0, n_window_widths=10.0),
     n_workers  = N_WORKERS,
     batch_size = 50,
     seed       = 42,

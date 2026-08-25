@@ -5,13 +5,13 @@ import os
 
 repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Path to the directory containing pq_dist_v8.py
+# Path to the directory containing pq_dist_v9.py
 module_dir = os.path.join(repo_root, 'python')
 sys.path.append(module_dir)
 
-# pq_dist_v8 contains the Python implementation with the numerical N integral
+# pq_dist_v9 contains the Python implementation with the numerical N integral
 # (21-point Simpson's rule, sigp/sigq at noiseless energies), matching Fortran PpqN.
-import pq_dist_v8 as ppq
+import pq_dist_v9 as ppq
 
 folderpath = repo_root
 if os.name == 'posix': #Linux/Mac
@@ -22,10 +22,9 @@ else:
 api = np.ctypeslib.load_library(DLLname,folderpath)
 
 # Define all our parameters and variables
-a = 0.16
-b = 0.18
+k = 0.18
+Z = 32.0
 F0 = 0.122
-s = 0.0
 eps = 3E-3
 V=3.0
 p0=0.06421907
@@ -41,19 +40,9 @@ Eq = 100
 api.Y.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double]
 api.Y.restype = ctypes.c_double
 
-result_fort = api.Y(ctypes.c_double(Er), ctypes.c_double(a), ctypes.c_double(b))  
-result_py = a * Er ** b
+result_fort = api.Y(ctypes.c_double(Er), ctypes.c_double(k), ctypes.c_double(Z))
+result_py = ppq.Y(Er, k=k, Z=Z)
 print('back in python after running function Y')
-print('The fortran result is ', result_fort)
-print('The python result is ', result_py)
-
-# Define argument and return types for the function F
-api.F.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double]
-api.F.restype = ctypes.c_double
-
-result_fort = api.F(ctypes.c_double(Er), ctypes.c_double(F0), ctypes.c_double(s))
-result_py = F0 + s * Er
-print('back in python after running function F')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
 
@@ -61,8 +50,8 @@ print('The python result is ', result_py)
 api.Nbar.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double]
 api.Nbar.restype = ctypes.c_double
 
-result_fort = api.Nbar(ctypes.c_double(Er), ctypes.c_double(a), ctypes.c_double(b), ctypes.c_double(eps))
-result_py = ppq.Nbar(Er, a=a, b=b, eps=eps)
+result_fort = api.Nbar(ctypes.c_double(Er), ctypes.c_double(k), ctypes.c_double(Z), ctypes.c_double(eps))
+result_py = ppq.Nbar(Er, k=k, Z=Z, eps=eps)
 print('back in python after running function Nbar')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
@@ -109,42 +98,42 @@ print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
 
 # Define argument and return types for the function PpqFullN
-api.PpqFullN.argtypes = [ctypes.c_double] * 13
+api.PpqFullN.argtypes = [ctypes.c_double] * 12
 api.PpqFullN.restype = ctypes.c_double
 
-result_fort = api.PpqFullN(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                           ctypes.c_double(a), ctypes.c_double(b),
-                           ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
+result_fort = api.PpqFullN(ctypes.c_double(Er), ctypes.c_double(Ep), ctypes.c_double(Eq),
+                           ctypes.c_double(k), ctypes.c_double(Z),
+                           ctypes.c_double(F0), ctypes.c_double(eps),
                            ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
                            ctypes.c_double(q0), ctypes.c_double(q10))
-result_py = ppq.PpqFullN(Er, Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+result_py = ppq.PpqFullN(Er, Ep, Eq, k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
 print('back in python after running function PpqFullN')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
 
 # Define argument and return types for the function PpqN
-api.PpqN.argtypes = [ctypes.c_double] * 12
+api.PpqN.argtypes = [ctypes.c_double] * 11
 api.PpqN.restype = ctypes.c_double
 
-result_fort = api.PpqN(ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                       ctypes.c_double(a), ctypes.c_double(b),
-                       ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
+result_fort = api.PpqN(ctypes.c_double(Ep), ctypes.c_double(Eq),
+                       ctypes.c_double(k), ctypes.c_double(Z),
+                       ctypes.c_double(F0), ctypes.c_double(eps),
                        ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
                        ctypes.c_double(q0), ctypes.c_double(q10))
-(result_py, _), _, _ = ppq.PpqN_safe_inspect(Ep, Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+(result_py, _), _, _ = ppq.PpqN_safe_inspect(Ep, Eq, k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=0.1)
 print('back in python after running function PpqN')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
 
 # Define argument and return types for the function PpqG
-api.PpqG.argtypes = [ctypes.c_double] * 10
+api.PpqG.argtypes = [ctypes.c_double] * 9
 api.PpqG.restype = ctypes.c_double
 
-result_fort = api.PpqG(ctypes.c_double(Ep), ctypes.c_double(Eq), 
-                       ctypes.c_double(F0), ctypes.c_double(s), ctypes.c_double(eps),
+result_fort = api.PpqG(ctypes.c_double(Ep), ctypes.c_double(Eq),
+                       ctypes.c_double(F0), ctypes.c_double(eps),
                        ctypes.c_double(V), ctypes.c_double(p0), ctypes.c_double(p10),
                        ctypes.c_double(q0), ctypes.c_double(q10))
-(result_py, _), _, _ = ppq.PpqG_safe_inspect(Ep, Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+(result_py, _), _, _ = ppq.PpqG_safe_inspect(Ep, Eq, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=0.01)
 print('back in python after running function PpqG')
 print('The fortran result is ', result_fort)
 print('The python result is ', result_py)
@@ -154,7 +143,7 @@ api.PpqN_vector.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),  # Ep_arr
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),  # Eq_arr
     ctypes.c_int,              # n
-    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+    ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double,  # scalar params
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")   # res_arr (output)
@@ -170,14 +159,14 @@ n = Ep_arr.size
 res_arr = np.empty(n, dtype=np.float64)
 
 # Call the Fortran vectorized function
-api.PpqN_vector(Ep_arr, Eq_arr, n, a, b, F0, s, eps, V, p0, p10, q0, q10, res_arr)
+api.PpqN_vector(Ep_arr, Eq_arr, n, k, Z, F0, eps, V, p0, p10, q0, q10, res_arr)
 
 # Set argtypes and restype for the function PpqG_vector
 api.PpqG_vector.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),      # Ep_arr
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),      # Eq_arr
     ctypes.c_int,                                                        # n
-    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+    ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # scalar params
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")       # res_arr (output)
 ]
@@ -192,18 +181,25 @@ n = Ep_arr.size
 res_arr = np.empty(n, dtype=np.float64)
 
 # Call the Fortran vectorized function
-api.PpqG_vector(Ep_arr, Eq_arr, n, F0, s, eps, V, p0, p10, q0, q10, res_arr)
+api.PpqG_vector(Ep_arr, Eq_arr, n, F0, eps, V, p0, p10, q0, q10, res_arr)
 
 print("Vectorized result:", res_arr)
+
+# Package version
+api.PpqFort_version.argtypes = [ctypes.POINTER(ctypes.c_int)] * 3
+api.PpqFort_version.restype = None
+vmaj, vmin, vpatch = ctypes.c_int(), ctypes.c_int(), ctypes.c_int()
+api.PpqFort_version(ctypes.byref(vmaj), ctypes.byref(vmin), ctypes.byref(vpatch))
+print("Fortran version: ", (vmaj.value, vmin.value, vpatch.value))
+print("Python version: ", ppq.__version__)
 
 print("Parameters Are ####################")
 print("Er: ", Er)
 print("Ep: ", Ep)
 print("Eq: ", Eq)
-print("a: ", a)
-print("b: ", b)
+print("k: ", k)
+print("Z: ", Z)
 print("F0: ", F0)
-print("s: ", s)
 print("eps: ", eps)
 print("V: ", V)
 print("p0: ", p0)

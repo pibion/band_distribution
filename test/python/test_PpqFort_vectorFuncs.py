@@ -11,10 +11,9 @@ else:
 api = np.ctypeslib.load_library(DLLname,folderpath)
 
 # Define all our parameters and variables
-a = 0.16
-b = 0.18
+k = 0.18
+Z = 32.0
 F0 = 0.122
-s = 0.0
 eps = 3E-3
 V=3.0
 p0=0.06421907
@@ -31,7 +30,7 @@ api.PpqN_vector.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),  # Ep_arr
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),  # Eq_arr
     ctypes.c_int,              # n
-    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+    ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double,  # scalar params
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")   # res_arr (output)
@@ -42,7 +41,7 @@ api.PpqN_vector.restype = None
 res_arr = np.empty(n, dtype=np.float64)
 
 # Call the Fortran vectorized function
-api.PpqN_vector(Ep_arr, Eq_arr, n, a, b, F0, s, eps, V, p0, p10, q0, q10, res_arr)
+api.PpqN_vector(Ep_arr, Eq_arr, n, k, Z, F0, eps, V, p0, p10, q0, q10, res_arr)
 
 print("Vectorized result of PpqN_vector:", res_arr)
 
@@ -51,7 +50,7 @@ api.PpqG_vector.argtypes = [
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),      # Ep_arr
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS"),      # Eq_arr
     ctypes.c_int,                                                        # n
-    ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
+    ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # scalar params
     np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")       # res_arr (output)
 ]
@@ -66,17 +65,16 @@ n = Ep_arr.size
 res_arr = np.empty(n, dtype=np.float64)
 
 # Call the Fortran vectorized function
-api.PpqG_vector(Ep_arr, Eq_arr, n, F0, s, eps, V, p0, p10, q0, q10, res_arr)
+api.PpqG_vector(Ep_arr, Eq_arr, n, F0, eps, V, p0, p10, q0, q10, res_arr)
 
 print("Vectorized result of PpqG_vector:", res_arr)
 
 print("Parameters Are ####################")
 print("Ep: ", Ep_arr)
 print("Eq: ", Eq_arr)
-print("a: ", a)
-print("b: ", b)
+print("k: ", k)
+print("Z: ", Z)
 print("F0: ", F0)
-print("s: ", s)
 print("eps: ", eps)
 print("V: ", V)
 print("p0: ", p0)

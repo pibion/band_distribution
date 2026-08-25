@@ -2,68 +2,33 @@ import numpy as np
 import scipy.integrate as integrate
 from scipy.optimize import curve_fit
 
-# order of parameters: specified by this dictionary 
-# When building functions: leave out un-needed parameters, always give default values
-def get_par_idx():
-    return {'a':0, 'b':1, 'F':2, 'F0':3, 's':4, 'eps':5, 'V':6, 'p0':7, 'p10':8,'q0':9,'q10':10,\
-           'PNa':11, 'PNb':12, 'PNd':13, 'PGa':14 , 'PGb':15 , 'PGd':16}
+__version__ = "1.0.0"
 
-#get default
-def get_par_default():
-    return {'a':0.16, 'b':0.18, 'F':0.122, 'F0':0.0, 's':0.0, 'eps':3.0e-3, 'V':3.0, 'p0':0.06421907, 'p10':0.48998486,'q0':0.23718488,'q10':0.27093151,\
-           'PNa':0.53693208, 'PNb':6.41515782, 'PNd':23.71789286, 'PGa':5.73211975e-01 , 'PGb':1.69520023e-01 , 'PGd':2.79552394e+02}
-
-def get_par_old_default():
-    return {'a':0.16, 'b':0.18, 'F':0.0, 'F0':0.12, 's':0.0, 'eps':3.0e-3, 'V':3.0, 'p0':0.5, 'p10':0.956,'q0':0.1,'q10':0.306,\
-           'PNa':0.9629, 'PNb':5.468, 'PNd':29.4900, 'PGa':1.0 , 'PGb':100.0 , 'PGd':10000000000000000000000.0}
-
-#get default ERs
-def get_par_defaultER():
-    #only difference is yield parameters must be a=1, b=0; also F0=s=0
-    pars = get_par_default()
-    pars['a'] = 1.0
-    pars['b'] = 0.0
-    return pars
-
-#get old default ERs
-def get_par_old_defaultER():
-    #only difference is yield parameters must be a=1, b=0; also F0=s=0
-    pars = get_par_old_default()
-    pars['a'] = 1.0
-    pars['b'] = 0.0
-    return pars
-
-#the ionization yield. Could use fancier models later.
+#the ionization yield: the Lindhard model.
+#Y(Er) = k*g(eps_L) / (1 + k*g(eps_L)), with
+#eps_L = 11.5*Er*Z**(-7/3) and g(eps_L) = 3*eps_L**0.15 + 0.7*eps_L**0.29 + eps_L
 def Y(Er,
 	*,
-	a=0.16,b=0.18):
-    #ER should be in keV
-    #a=0.16; b=0.18 from previous NRFano paper
-    #return a*np.absolute(Er)**0.6
-    return a*np.absolute(Er)**b
+	k, Z):
+    #Er should be in keV; Z is the target's atomic number
+    eps_L = 11.5 * np.absolute(Er) * Z**(-7.0/3.0)
+    g = 3.0*eps_L**0.15 + 0.7*eps_L**0.29 + eps_L
+    return k*g / (1.0 + k*g)
 
-#define the Fano Factors for ERs and NRs
-#default for ER is average of fano range from: https://arxiv.org/pdf/2206.13639.pdf
-def F(Er,
-	*,
-	F0=0.122,s=0.0):
-    #s is slope in fano per keV
-    #F is Fano at zero energy
-    return F0 + s*Er
-
-#average numbers of e/h pairs
+#average numbers of e/h pairs (nuclear recoils; electron recoils use Y=1
+#directly rather than calling this -- see PpqFullG/PpqExp's is_gamma branch)
 def Nbar(Er,
 	  *,
-	  a=0.16,b=0.18,
-	  eps=3e-3):
-    return Y(Er,a=a,b=b)*Er/eps
+	  k, Z,
+	  eps):
+    return Y(Er,k=k,Z=Z)*Er/eps
 
 #phonon and ionization resolutions
 def sigp(Ep,
 	  *,
-	  eps=3.0e-3,
-	  V=3.0,
-	  p0=0.06421907, p10=0.48998486):
+	  eps,
+	  V,
+	  p0, p10):
     e2pre = (p10**2 - p0**2)
     e2e = (Ep/(10*(1+(V/eps/1000))))**2
     #e2e = (Ep/(10*((V/eps/1000))))**2 #THIS ERROR WAS IN pq_dist v1!! it makes a difference!
@@ -71,91 +36,101 @@ def sigp(Ep,
 
 def sigq(Eq,
 	  *,
-	  q0=0.23718488, q10=0.27093151):
+	  q0, q10):
     e2pre = (q10**2 - q0**2)
     e2e = (Eq/10)**2
     return np.sqrt(q0**2+e2pre*e2e)
 
 #probability distribution of _true_ recoil energy, separate for gammas, Cfgammas or neutrons
-#fit parameters A=0.9629
-def PErN(Er,
-              *,
-              PNa=0.53693208,
-              PNb=6.41515782, PNd=23.71789286):
+#fit parameters -- matches the Fortran PErN_impl constants exactly (not
+#exposed as arguments there either: PErN(Er) is the public signature)
+_PNa, _PNb, _PNd = 0.53693208, 6.41515782, 23.71789286
+
+def PErN(Er):
     Er = np.asarray(Er)  # Convert input to a NumPy array
-    result = np.where(Er < 0, 0, PNa * (1 / PNb) * np.exp(-Er / PNb) + (1 - PNa) * (1 / PNd) * np.exp(-Er / PNd))
-    return result 
+    result = np.where(Er < 0, 0, _PNa * (1 / _PNb) * np.exp(-Er / _PNb) + (1 - _PNa) * (1 / _PNd) * np.exp(-Er / _PNd))
+    return result
 #...TBD gammas
 
-# Cfgammas
+# Cfgammas -- matches the Fortran PErG_impl constants exactly
+_PGa, _PGb, _PGd = 5.73211975e-01, 1.69520023e-01, 2.79552394e+02
 
-def PErG(Er, *, PGa=5.73211975e-01, PGb=1.69520023e-01, PGd=2.79552394e+02):
+def PErG(Er):
     Er = np.asarray(Er)  # Convert Er to a NumPy array
-    result = np.where(Er < 0, 0, PGa * (1 / PGb) * np.exp(-Er / PGb) + (1 - PGa) * (1 / PGd) * np.exp(-Er / PGd))
-    return result   
+    result = np.where(Er < 0, 0, _PGa * (1 / _PGb) * np.exp(-Er / _PGb) + (1 - _PGa) * (1 / _PGd) * np.exp(-Er / _PGd))
+    return result
 
 def aN(Er,Ep,Eq,
 	      *,
-	      F0=0.122,s=0.0,
-	      eps=3.0e-3,
-	      V=3.0,
-	      p0=0.06421907, p10=0.48998486,
-	      q0=0.23718488, q10=0.27093151):
+	      F0,
+	      eps,
+	      V,
+	      p0, p10,
+	      q0, q10):
     t1 = (V/1e3)*(Ep-Er)/sigp(Ep,eps=eps,V=V,p0=p0,p10=p10)**2
     t2 = eps*Eq/sigq(Eq,q0=q0,q10=q10)**2
-    t3 = 1/F(Er,F0=F0,s=s)
+    t3 = 1/F0
     return t1+t2+t3
 
+#is_gamma selects the electron-recoil yield (Y=1) instead of the Lindhard
+#NR yield Y(Er,k=k,Z=Z); k, Z are unused (pass any value) when is_gamma=True.
 def bN(Er,Ep,Eq,
 	      *,
-	      a=0.16,b=0.18,
-	      F0=0.122,s=0.0,
-	      eps=3.0e-3,
-	      V=3.0,
-	      p0=0.06421907, p10=0.48998486,
-	      q0=0.23718488, q10=0.27093151):
-    t1 = 1/(2*Nbar(Er,a=a,b=b,eps=eps)*F(Er,F0=F0,s=s))
+	      k,Z,
+	      F0,
+	      eps,
+	      V,
+	      p0, p10,
+	      q0, q10,
+	      is_gamma):
+    Nbar_val = np.abs(Er)/eps if is_gamma else Y(Er,k=k,Z=Z)*Er/eps
+    t1 = 1/(2*Nbar_val*F0)
     t2 = eps**2/(2*sigq(Eq,q0=q0,q10=q10)**2)
     t3 = V**2/(2*(sigp(Ep,eps=eps,V=V,p0=p0,p10=p10)*1e3)**2)
     return t1+t2+t3
 
 def cN(Er,Ep,Eq,
 	      *,
-	      a=0.16,b=0.18,
-	      F0=0.122,s=0.0,
-	      eps=3.0e-3,
-	      V=3.0,
-	      p0=0.06421907, p10=0.48998486,
-	      q0=0.23718488, q10=0.27093151):
+	      k,Z,
+	      F0,
+	      eps,
+	      V,
+	      p0, p10,
+	      q0, q10,
+	      is_gamma):
+    Nbar_val = np.abs(Er)/eps if is_gamma else Y(Er,k=k,Z=Z)*Er/eps
     t1 = -(Ep-Er)**2/(2*sigp(Ep,eps=eps,V=V,p0=p0,p10=p10)**2)
     t2 = -Eq**2/(2*sigq(Eq,q0=q0,q10=q10)**2)
-    t3 = -Nbar(Er,a=a,b=b,eps=eps)/(2*F(Er,F0=F0,s=s))
+    t3 = -Nbar_val/(2*F0)
     return t1+t2+t3
 
+#is_gamma selects the electron-recoil yield (Y=1) instead of the Lindhard
+#NR yield Y(Er,k=k,Z=Z); k, Z are unused (pass any value) when is_gamma=True.
 def PpqExp(Er,Ep,Eq,
 	          *,
-	          a=0.16,b=0.18,
-	          F0=0.122,s=0.0,
-	          eps=3.0e-3,
-	          V=3.0,
-	          p0=0.06421907, p10=0.48998486,
-	          q0=0.23718488, q10=0.27093151):
-    cN_val = cN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    aN_val = aN(Er,Ep,Eq,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
-    bN_val = bN(Er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
+	          k,Z,
+	          F0,
+	          eps,
+	          V,
+	          p0, p10,
+	          q0, q10,
+	          is_gamma):
+    cN_val = cN(Er,Ep,Eq,k=k,Z=Z,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10,is_gamma=is_gamma)
+    aN_val = aN(Er,Ep,Eq,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
+    bN_val = bN(Er,Ep,Eq,k=k,Z=Z,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10,is_gamma=is_gamma)
     exponent = cN_val + (aN_val**2 / (4*bN_val))
     return exponent
 
 def PpqFullN(Er, Ep, Eq,
              *,
-             a=0.16, b=0.18,
-             F0=0.122, s=0.0,
-             eps=3.0e-3,
-             V=3.0,
-             p0=0.06421907, p10=0.48998486,
-             q0=0.23718488, q10=0.27093151):
-    F_val    = F(Er, F0=F0, s=s)
-    Nbar_val = Nbar(Er, a=a, b=b, eps=eps)
+             k, Z,
+             F0,
+             eps,
+             V,
+             p0, p10,
+             q0, q10):
+    F_val    = F0
+    Nbar_val = Nbar(Er, k=k, Z=Z, eps=eps)
     if Nbar_val <= 0.0 or F_val <= 0.0:
         return 0.0
     sigma_N    = np.sqrt(Nbar_val * F_val)
@@ -198,16 +173,16 @@ def PpqFullN(Er, Ep, Eq,
 
 def PpqN_safe_inspect_vec(Ep, Eq,
               *,
-              a=0.16, b=0.18,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              res=0.1):
+              k, Z,
+              F0,
+              eps,
+              V,
+              p0, p10,
+              q0, q10,
+              res):
     ppqNArr = []
     for this_Ep, this_Eq in zip(Ep, Eq):
-        PpqNval, _, _ = PpqN_safe_inspect(this_Ep, this_Eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res)
+        PpqNval, _, _ = PpqN_safe_inspect(this_Ep, this_Eq, k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res)
         ppqNArr.append(PpqNval[0])
     return ppqNArr
 
@@ -217,18 +192,18 @@ Usage to just get the value of PpqN:
 """
 def PpqN_safe_inspect(Ep, Eq,
               *,
-              a=0.16, b=0.18,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              res=0.1):
-    if F0 == 0 and s == 0:
-        raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
+              k, Z,
+              F0,
+              eps,
+              V,
+              p0, p10,
+              q0, q10,
+              res):
+    if F0 == 0:
+        raise ValueError("Fano factor F(Er) = F0 is zero for all Er")
 
     # find Er_max
-    f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
+    f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,k=k,Z=Z,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10,is_gamma=False)
 
     # WARNING
     # this will only work if your peaks have a width
@@ -241,11 +216,11 @@ def PpqN_safe_inspect(Ep, Eq,
     for idx, er in enumerate(er_arr):
         #print (f(er, Ep, Eq), type(f(er, Ep, Eq)))
         try:
-            f_arr[idx] = -1*PpqExp(er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
+            f_arr[idx] = -1*PpqExp(er,Ep,Eq,k=k,Z=Z,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10,is_gamma=False)
         except Exception as e:
             pass
             # print (er, Ep, Eq)
-            # print (-1*PpqExp(er,Ep,Eq,a=a,b=b,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10))
+            # print (-1*PpqExp(er,Ep,Eq,k=k,Z=Z,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10,is_gamma=False))
     real_val_idx = np.where(f_arr > 0)[0]
     if len(real_val_idx) == 0:
         if np.all(f_arr == 0):
@@ -260,18 +235,18 @@ def PpqN_safe_inspect(Ep, Eq,
         # print ("We found a peak at ", Ermx, " in the exponent term")
 
     # Define the function (replace PpqFullG with your actual implementation)
-    g = lambda er, ep, eq: PpqFullN(er, ep, eq, a=a, b=b, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+    g = lambda er, ep, eq: PpqFullN(er, ep, eq, k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
 
     return integrate_g_safe_inspect(g, Ep, Eq, Ermx, res)
 
 def PpqFullG(Er, Ep, Eq,
              *,
-             F0=0.122, s=0.0,
-             eps=3.0e-3,
-             V=3.0,
-             p0=0.06421907, p10=0.48998486,
-             q0=0.23718488, q10=0.27093151):
-    F_val    = F(Er, F0=F0, s=s)
+             F0,
+             eps,
+             V,
+             p0, p10,
+             q0, q10):
+    F_val    = F0
     Nbar_val = Er / eps          # Y=1 for electron recoils
     if Nbar_val <= 0.0 or F_val <= 0.0:
         return 0.0
@@ -486,15 +461,15 @@ def integrate_g_safe_inspect(g, Ep, Eq, Ermx, resolution):
 
 def PpqG_safe_inspect_vec(Ep, Eq,
               *,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              res=0.01):
+              F0,
+              eps,
+              V,
+              p0, p10,
+              q0, q10,
+              res):
     ppqGArr = []
     for this_Ep, this_Eq in zip(Ep, Eq):
-        PpqGval, _, _ = PpqG_safe_inspect(this_Ep, this_Eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res)
+        PpqGval, _, _ = PpqG_safe_inspect(this_Ep, this_Eq, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10, res=res)
         ppqGArr.append(PpqGval[0])
     return ppqGArr
 
@@ -504,14 +479,14 @@ Usage to just get the value of PpqN:
 """
 def PpqG_safe_inspect(Ep, Eq,
               *,
-              F0=0.122, s=0.0,
-              eps=3.0e-3,
-              V=3.0,
-              p0=0.06421907, p10=0.48998486,
-              q0=0.23718488, q10=0.27093151,
-              res=0.01):
-    if F0 == 0 and s == 0:
-        raise ValueError("Fano factor F(Er) = F0 + s*Er is zero for all Er; F0 and s cannot both be zero")
+              F0,
+              eps,
+              V,
+              p0, p10,
+              q0, q10,
+              res):
+    if F0 == 0:
+        raise ValueError("Fano factor F(Er) = F0 is zero for all Er")
 
     # Set parameters for integration
     # ER peaks can be as narrow as the zero-energy ionization
@@ -521,9 +496,10 @@ def PpqG_safe_inspect(Ep, Eq,
     # grid the Fortran PpqG integrates on
 
     # Define the function (replace PpqFullG with your actual implementation)
-    g = lambda er, ep, eq: PpqFullG(er, ep, eq, F0=F0, s=s, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+    g = lambda er, ep, eq: PpqFullG(er, ep, eq, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
 
-    f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,a=1.0,b=0.0,F0=F0,s=s,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10)
+    # k, Z are unused placeholders here: is_gamma=True forces Y=1 in PpqExp
+    f = lambda er,ep,eq: -1*PpqExp(er,ep,eq,k=0.0,Z=1.0,F0=F0,eps=eps,V=V,p0=p0,p10=p10,q0=q0,q10=q10,is_gamma=True)
 
     # WARNING
     # this will only work if your peaks have a width

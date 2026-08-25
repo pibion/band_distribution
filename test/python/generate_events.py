@@ -12,7 +12,7 @@ Generating samples instead follows the latent-variable chain:
   Ep | Er,N ~ Normal      (phonon detector: Neganov-Luke + thermal)
   Eq | N    ~ Normal      (charge detector)
 
-For gamma (ER) events, substitute PErG and Y=1 (a=1, b=0).
+For gamma (ER) events, substitute PErG and Y=1.
 """
 
 import numpy as np
@@ -21,10 +21,10 @@ import sys, os
 
 # Y, sigp, sigq come from the validated python reference implementation
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "python"))
-import pq_dist_v8 as ppq
+import pq_dist_v9 as ppq
 
 
-def _sample_PErN(n, rng, PNa=0.53693208, PNb=6.41515782, PNd=23.71789286):
+def _sample_PErN(n, rng, PNa, PNb, PNd):
     """Sample Er from the biexponential neutron spectrum PErN."""
     component = rng.uniform(size=n) < PNa
     return np.where(component,
@@ -32,7 +32,7 @@ def _sample_PErN(n, rng, PNa=0.53693208, PNb=6.41515782, PNd=23.71789286):
                     rng.exponential(PNd, size=n))
 
 
-def _sample_PErG(n, rng, PGa=0.573211975, PGb=0.169520023, PGd=279.552394):
+def _sample_PErG(n, rng, PGa, PGb, PGd):
     """Sample Er from the biexponential gamma spectrum PErG."""
     component = rng.uniform(size=n) < PGa
     return np.where(component,
@@ -65,31 +65,26 @@ def _sample_N(Nbar_arr, F_arr, rng):
     return N
 
 
-def generate_NR_events(n_events, *,
-                       a=0.16, b=0.18,
-                       F0=0.122, s=0.0,
-                       eps=3.0e-3,
-                       V=3.0,
-                       p0=0.06421907, p10=0.48998486,
-                       q0=0.23718488, q10=0.27093151,
-                       PNa=0.53693208, PNb=6.41515782, PNd=23.71789286,
-                       seed=None):
+def _generate_events(n_events, *, Nbar_func,
+                     F0,
+                     eps,
+                     V,
+                     p0, p10,
+                     q0, q10,
+                     PNa, PNb, PNd,
+                     seed):
     """
-    Generate (Ep, Eq) pairs distributed according to PpqN.
-
-    Returns
-    -------
-    Ep : ndarray, shape (n_events,)
-    Eq : ndarray, shape (n_events,)
-    Er : ndarray, shape (n_events,)   – latent true recoil energies
-    N  : ndarray, shape (n_events,)   – latent e/h pair counts
+    Shared generator: draws Er from the biexponential PNa/PNb/PNd spectrum
+    and mean e/h pair count Nbar_func(Er), then simulates the rest of the
+    detector chain. NR/ER differ only in Nbar_func and which spectrum
+    parameters they pass (see generate_NR_events/generate_ER_events).
     """
     rng = np.random.default_rng(seed)
 
     Er = _sample_PErN(n_events, rng, PNa=PNa, PNb=PNb, PNd=PNd)
 
-    Nbar = ppq.Y(Er, a=a, b=b) * Er / eps          # mean e/h pairs
-    F_val = F0 + s * Er                              # Fano factor
+    Nbar = Nbar_func(Er)                             # mean e/h pairs
+    F_val = np.full_like(Er, F0)                      # Fano factor (constant)
 
     N = _sample_N(Nbar, F_val, rng)
 
@@ -108,18 +103,43 @@ def generate_NR_events(n_events, *,
     return Ep, Eq, Er, N
 
 
+def generate_NR_events(n_events, *,
+                       k, Z,
+                       F0,
+                       eps,
+                       V,
+                       p0, p10,
+                       q0, q10,
+                       PNa, PNb, PNd,
+                       seed):
+    """
+    Generate (Ep, Eq) pairs distributed according to PpqN.
+
+    Returns
+    -------
+    Ep : ndarray, shape (n_events,)
+    Eq : ndarray, shape (n_events,)
+    Er : ndarray, shape (n_events,)   – latent true recoil energies
+    N  : ndarray, shape (n_events,)   – latent e/h pair counts
+    """
+    return _generate_events(n_events, Nbar_func=lambda Er: ppq.Y(Er, k=k, Z=Z) * Er / eps,
+                            F0=F0, eps=eps, V=V,
+                            p0=p0, p10=p10, q0=q0, q10=q10,
+                            PNa=PNa, PNb=PNb, PNd=PNd, seed=seed)
+
+
 def generate_ER_events(n_events, *,
-                       F0=0.122, s=0.0,
-                       eps=3.0e-3,
-                       V=3.0,
-                       p0=0.06421907, p10=0.48998486,
-                       q0=0.23718488, q10=0.27093151,
-                       PGa=0.573211975, PGb=0.169520023, PGd=279.552394,
-                       seed=None):
+                       F0,
+                       eps,
+                       V,
+                       p0, p10,
+                       q0, q10,
+                       PGa, PGb, PGd,
+                       seed):
     """
     Generate (Ep, Eq) pairs distributed according to PpqG.
 
-    Gamma / electron-recoil events have ionization yield Y = 1 (a=1, b=0).
+    Gamma / electron-recoil events have ionization yield Y = 1.
 
     Returns
     -------
@@ -128,11 +148,7 @@ def generate_ER_events(n_events, *,
     Er : ndarray, shape (n_events,)
     N  : ndarray, shape (n_events,)
     """
-    return generate_NR_events(n_events,
-                              a=1.0, b=0.0,
-                              F0=F0, s=s,
-                              eps=eps, V=V,
-                              p0=p0, p10=p10,
-                              q0=q0, q10=q10,
-                              PNa=PGa, PNb=PGb, PNd=PGd,
-                              seed=seed)
+    return _generate_events(n_events, Nbar_func=lambda Er: Er / eps,
+                            F0=F0, eps=eps, V=V,
+                            p0=p0, p10=p10, q0=q0, q10=q10,
+                            PNa=PGa, PNb=PGb, PNd=PGd, seed=seed)
