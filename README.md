@@ -117,6 +117,14 @@ Choose which compiler you want, determine the name of the dockerfile, and then i
 docker build -f {dockerfile name} -t band .
 ```
 
+By default this builds from your local checkout, including any uncommitted changes.  To instead build a specific released version — e.g. so someone else can reproduce your exact results without needing their own clone lined up to the right commit — pass `GIT_REF` as a build argument.  It clones the repository fresh from GitHub and checks out that tag or commit hash in place of the local files:
+
+```
+docker build -f {dockerfile name} -t band --build-arg GIT_REF=v0.9.0 .
+```
+
+`GIT_REF` accepts any tag or commit hash (run `git tag -l` to see available versions) and works identically on all five Dockerfiles (`Dockerfile_gfortran`, `Dockerfile_intel`, `Dockerfile_llvm`, `Dockerfile_jupyter`, `Dockerfile_tau_intel`).  `v0.9.0` is the last release before the Lindhard `(k, Z)` yield model's breaking interface change.
+
 If you need to troubleshoot the docker build, you can shell into this container with the command
 
 ```
