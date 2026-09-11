@@ -71,6 +71,26 @@ def _load_library():
     ]
     _api.PpqFort_version.restype = None
 
+    _api.PpqN_region.argtypes = [
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
+        ctypes.c_int, ctypes.c_int,                                          # n_ep, n_eq_window
+        ctypes.c_double,                                                     # n_window_widths
+        ctypes.c_double, ctypes.c_double, ctypes.c_double,                   # k, Z, F0
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
+        ctypes.c_double, ctypes.c_double,                                    # q0, q10
+    ]
+    _api.PpqN_region.restype = ctypes.c_double
+
+    _api.PpqG_region.argtypes = [
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
+        ctypes.c_int, ctypes.c_int,                                          # n_ep, n_eq_window
+        ctypes.c_double,                                                     # n_window_widths
+        ctypes.c_double,                                                     # F0
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
+        ctypes.c_double, ctypes.c_double,                                    # q0, q10
+    ]
+    _api.PpqG_region.restype = ctypes.c_double
+
     return _api
 
 
@@ -124,6 +144,37 @@ def make_ppqg_pdf(*, F0, eps, V, p0, p10, q0, q10, n_workers=None):
         api.PpqG_vector(ep, eq, ep.size, *scalars, out)
 
     return _make_threaded_pdf(_eval_chunk, n_workers)
+
+
+def ppqn_region(ep_min, ep_max, eq_min, eq_max, *,
+                 n_ep, n_eq_window, n_window_widths,
+                 k, Z, F0, eps, V, p0, p10, q0, q10):
+    """
+    Integral of PpqN over [ep_min,ep_max] x [eq_min,eq_max], computed
+    entirely in Fortran (a single call, no per-point ctypes round trips)
+    -- see region_integral.py's docstring for the algorithm and why this
+    is much faster than nested scipy.integrate.quad.  region_integral.py
+    reimplements the same algorithm in Python (batched through
+    make_ppqn_pdf) as an independent cross-check of this function.
+
+    n_ep, n_eq_window, n_window_widths are required (no defaults): they
+    directly control the accuracy of a number that feeds a likelihood
+    normalization.
+    """
+    api = _load_library()
+    return api.PpqN_region(ep_min, ep_max, eq_min, eq_max,
+                            n_ep, n_eq_window, n_window_widths,
+                            k, Z, F0, eps, V, p0, p10, q0, q10)
+
+
+def ppqg_region(ep_min, ep_max, eq_min, eq_max, *,
+                 n_ep, n_eq_window, n_window_widths,
+                 F0, eps, V, p0, p10, q0, q10):
+    """Same as ppqn_region but for PpqG (electron-recoil band, Y=1)."""
+    api = _load_library()
+    return api.PpqG_region(ep_min, ep_max, eq_min, eq_max,
+                            n_ep, n_eq_window, n_window_widths,
+                            F0, eps, V, p0, p10, q0, q10)
 
 
 def _make_threaded_pdf(eval_chunk, n_workers):

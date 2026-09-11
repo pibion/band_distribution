@@ -77,6 +77,30 @@ module PpqFort_m
     real(c_double) :: res
   end function PpqFullN
 
+  pure module function PpqN_region(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
+      n_window_widths, k, Z, F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN_region")
+    !! Integral of PpqN over the rectangle [ep_min,ep_max] x [eq_min,eq_max],
+    !! e.g. for normalizing a likelihood to its fit region.  n_ep is the
+    !! number of (outer) Ep grid points; n_eq_window is the number of
+    !! (inner) Eq grid points spanning the local ridge window at each Ep,
+    !! whose half-width is n_window_widths local band widths (see
+    !! band_breakpoints.py for the reference derivation of the ridge
+    !! location and width this mirrors).
+    real(c_double), value :: ep_min, ep_max, eq_min, eq_max
+    integer(c_int), value :: n_ep, n_eq_window
+    real(c_double), value :: n_window_widths, k, Z, F0, eps, V, p0, p10, q0, q10
+    real(c_double) :: res
+  end function PpqN_region
+
+  pure module function PpqG_region(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
+      n_window_widths, F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG_region")
+    !! Same as PpqN_region but for PpqG (electron-recoil band, Y=1).
+    real(c_double), value :: ep_min, ep_max, eq_min, eq_max
+    integer(c_int), value :: n_ep, n_eq_window
+    real(c_double), value :: n_window_widths, F0, eps, V, p0, p10, q0, q10
+    real(c_double) :: res
+  end function PpqG_region
+
   pure module subroutine PpqFort_version(major, minor, patch) bind(c, name="PpqFort_version")
     !! Report the package version (see fpm.toml's version field, which
     !! must be kept in sync by hand)
@@ -91,7 +115,7 @@ module PpqFort_m
 
   ! Package version (semver).  Keep in sync with fpm.toml's version field.
   integer(c_int), parameter :: version_major = 1
-  integer(c_int), parameter :: version_minor = 0
+  integer(c_int), parameter :: version_minor = 1
   integer(c_int), parameter :: version_patch = 0
 
 end module PpqFort_m

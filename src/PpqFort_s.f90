@@ -212,6 +212,26 @@ contains
       res = PpqCondN(Er, Ep, Eq, pars, .false.) * PErN(Er)
   end procedure PpqFullN
 
+  ! PpqN_region / PpqG_region: integral of PpqN/PpqG over a rectangular
+  ! (Ep,Eq) region, e.g. to normalize a likelihood to its fit region.
+  ! See region_integral for the algorithm.
+  module procedure PpqN_region
+      type(detector_params_t) :: pars
+
+      pars = make_params(k, Z, F0, eps, V, p0, p10, q0, q10, .false.)
+      res = region_integral(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
+                            n_window_widths, pars, .false.)
+  end procedure PpqN_region
+
+  module procedure PpqG_region
+      type(detector_params_t) :: pars
+
+      ! k, Z are unused when is_gamma is .true.; placeholders as elsewhere.
+      pars = make_params(0.0d0, 0.0d0, F0, eps, V, p0, p10, q0, q10, .true.)
+      res = region_integral(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
+                            n_window_widths, pars, .true.)
+  end procedure PpqG_region
+
   ! ---------------------------------------------------------------------
   ! Private helpers
   ! ---------------------------------------------------------------------
@@ -729,5 +749,148 @@ contains
           res = res + tmp
       end do
   end function integrate_band
+
+  ! Linear interpolation of ytab(xtab) at x, matching numpy.interp:
+  ! clamps to the table's end values outside its range.  xtab must be
+  ! sorted ascending.
+  pure function interp1d(x, xtab, ytab, n) result(y)
+      real(c_double), intent(in) :: x
+      integer, intent(in) :: n
+      real(c_double), intent(in) :: xtab(n), ytab(n)
+      real(c_double) :: y
+      integer :: i
+      real(c_double) :: t
+
+      if (x <= xtab(1)) then
+          y = ytab(1)
+      else if (x >= xtab(n)) then
+          y = ytab(n)
+      else
+          y = ytab(n)
+          do i = 1, n - 1
+              if (x >= xtab(i) .and. x <= xtab(i + 1)) then
+                  t = (x - xtab(i)) / (xtab(i + 1) - xtab(i))
+                  y = ytab(i) + t * (ytab(i + 1) - ytab(i))
+                  exit
+              end if
+          end do
+      end if
+  end function interp1d
+
+  ! Tabulate the noiseless band ridge Er -> (Ep(Er), Eq(Er)) on a
+  ! log-spaced Er grid from 1e-3 keV to er_hi.  Same physics as
+  ! band_breakpoints.py: Eq = Y(Er)*Er, Ep = Er*(1 + Y(Er)*V/(1000*eps)),
+  ! with Y=1 for the ER band (is_gamma) and the Lindhard yield otherwise.
+  ! Both are monotone increasing in Er, so this table is invertible by
+  ! interpolation (interp1d, via ridge_eq_and_width below).
+  pure subroutine build_ridge_table(pars, is_gamma, er_hi, n_tab, ep_tab, eq_tab)
+      type(detector_params_t), intent(in) :: pars
+      logical, intent(in) :: is_gamma
+      real(c_double), intent(in) :: er_hi
+      integer, intent(in) :: n_tab
+      real(c_double), intent(out) :: ep_tab(n_tab), eq_tab(n_tab)
+      real(c_double), parameter :: er_lo = 1.0d-3
+      real(c_double) :: dlx, er, y_val
+      integer :: i
+
+      dlx = (log(er_hi) - log(er_lo)) / real(n_tab - 1, c_double)
+      do i = 1, n_tab
+          er = exp(log(er_lo) + real(i - 1, c_double) * dlx)
+          if (is_gamma) then
+              y_val = 1.0d0
+          else
+              y_val = lindhard_yield_zfac(er, pars%k, pars%Zfac)
+          end if
+          eq_tab(i) = y_val * er
+          ep_tab(i) = er * (1.0d0 + y_val * pars%V / (1000.0d0 * pars%eps))
+      end do
+  end subroutine build_ridge_table
+
+  ! The band's local ridge Eq value and width in the Eq direction at a
+  ! given Ep, inverting the tabulated ridge by interpolation.  Mirrors
+  ! band_breakpoints.py's eq_ridge()/inner_points_func width derivation
+  ! exactly: width = hypot(sigq(ridge), slope * sigp(ep)), slope by
+  ! central finite difference of the interpolated ridge.
+  pure subroutine ridge_eq_and_width(ep, ep_tab, eq_tab, n_tab, pars, eqr, width)
+      real(c_double), intent(in) :: ep
+      integer, intent(in) :: n_tab
+      real(c_double), intent(in) :: ep_tab(n_tab), eq_tab(n_tab)
+      type(detector_params_t), intent(in) :: pars
+      real(c_double), intent(out) :: eqr, width
+      real(c_double) :: dep, eqr_plus, eqr_minus, slope, sigp_val, sigq_val
+
+      eqr = interp1d(ep, ep_tab, eq_tab, n_tab)
+      dep = max(1.0d-3, 0.01d0 * ep)
+      eqr_plus  = interp1d(ep + dep, ep_tab, eq_tab, n_tab)
+      eqr_minus = interp1d(ep - dep, ep_tab, eq_tab, n_tab)
+      slope = (eqr_plus - eqr_minus) / (2.0d0 * dep)
+      sigp_val = sigp(ep, pars%eps, pars%V, pars%p0, pars%p10)
+      sigq_val = sigq(eqr, pars%q0, pars%q10)
+      width = sqrt(sigq_val**2 + (slope * sigp_val)**2)
+  end subroutine ridge_eq_and_width
+
+  ! Integral of PpqN/PpqG over [ep_min,ep_max] x [eq_min,eq_max]: a
+  ! nested nested trapezoid sum, not a flattened tensor grid -- the
+  ! inner Eq window is centred on the local ridge and so differs at
+  ! every outer Ep point.  n_ep, n_eq_window, n_window_widths are the
+  ! caller's explicit grid-density/window-size choices (see PpqN_region's
+  ! doc comment in PpqFort_m.f90); off-band regions integrate to ~0
+  ! naturally since integrate_band already returns 0 there.
+  pure function region_integral(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
+      n_window_widths, pars, is_gamma) result(res)
+      real(c_double), intent(in) :: ep_min, ep_max, eq_min, eq_max
+      integer, intent(in) :: n_ep, n_eq_window
+      real(c_double), intent(in) :: n_window_widths
+      type(detector_params_t), intent(in) :: pars
+      logical, intent(in) :: is_gamma
+      real(c_double) :: res
+      integer, parameter :: n_tab = 4000
+      real(c_double) :: ep_tab(n_tab), eq_tab(n_tab)
+      real(c_double) :: er_hi, h_ep
+      real(c_double) :: ep_i, eqr, width, eq_lo, eq_hi, h_eq, eq_j, f_j, inner, w_ep
+      integer :: i, j
+
+      if (n_ep < 2 .or. n_eq_window < 2) &
+          error stop "PpqN_region/PpqG_region: n_ep and n_eq_window must each be >= 2"
+
+      ! Ep(Er) >= Er always (yield is non-negative), so er_hi need only
+      ! comfortably exceed the largest Ep or Eq of interest.
+      er_hi = max(ep_max, eq_max) * 1.5d0 + 10.0d0
+      call build_ridge_table(pars, is_gamma, er_hi, n_tab, ep_tab, eq_tab)
+
+      h_ep = (ep_max - ep_min) / real(n_ep - 1, c_double)
+
+      res = 0.0d0
+      do concurrent (i = 1:n_ep) default(none) reduce(+: res) &
+          shared(ep_min, h_ep, n_ep, eq_min, eq_max, n_eq_window, n_window_widths, &
+                 ep_tab, eq_tab, pars, is_gamma) &
+          local(ep_i, eqr, width, eq_lo, eq_hi, h_eq, j, eq_j, f_j, inner, w_ep)
+
+          ep_i = ep_min + real(i - 1, c_double) * h_ep
+          call ridge_eq_and_width(ep_i, ep_tab, eq_tab, n_tab, pars, eqr, width)
+
+          eq_lo = max(eq_min, eqr - n_window_widths * width)
+          eq_hi = min(eq_max, eqr + n_window_widths * width)
+
+          inner = 0.0d0
+          if (eq_hi > eq_lo) then
+              h_eq = (eq_hi - eq_lo) / real(n_eq_window - 1, c_double)
+              do j = 1, n_eq_window
+                  eq_j = eq_lo + real(j - 1, c_double) * h_eq
+                  f_j = integrate_band(ep_i, eq_j, pars, is_gamma)
+                  if (j == 1 .or. j == n_eq_window) then
+                      inner = inner + 0.5d0 * f_j
+                  else
+                      inner = inner + f_j
+                  end if
+              end do
+              inner = inner * h_eq
+          end if
+
+          w_ep = merge(0.5d0, 1.0d0, i == 1 .or. i == n_ep)
+          res = res + w_ep * inner
+      end do
+      res = res * h_ep
+  end function region_integral
 
 end submodule PpqFort_s

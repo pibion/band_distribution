@@ -102,6 +102,35 @@ docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
 * Call the vectorized entry points (`PpqN_vector` / `PpqG_vector`) with all events in one call — the parallelism lives there, and per-event scalar calls pay OpenMP fork/join overhead instead.
 * **Shuffle the event array once at load time if it is ordered.**  The vector loops split the events into one contiguous chunk per thread (static scheduling), and the loop only finishes when the slowest chunk does.  Per-event cost varies several-fold across the (Ep, Eq) plane — deep-tail events short-circuit in ~2 us while on-band events cost ~10-15 us — so an energy-ordered array hands some threads chunks of expensive events while others idle at the barrier.  Shuffling gives every chunk a similar cost mix and measured 8-15% faster than energy-ordered input.  The result is identical either way, and if your events are already in effectively random order this changes nothing.
 
+# Normalizing a likelihood fit to a region: `PpqPDF`
+
+A likelihood fit needs the *un-normalized* PDF at each data point and the PDF's integral over the fit region (to normalize it) — both re-evaluated at every step as the fit/MCMC explores parameter space.  Computing that normalization with `scipy.integrate.quad` is several seconds per call (it evaluates the PDF one point at a time, at the ~3-25 ms/point *scalar* cost — see `python/ppqfort_pdf.py`'s docstring); `python/ppq_pdf.py`'s `PpqPDF` instead uses a ridge-aware fixed grid evaluated in one batched, thread-parallel call (`PpqN_region`/`PpqG_region` in Fortran — same physics as `test/python/band_breakpoints.py`'s ridge/width derivation), landing in the millisecond range under `ifx`/`flang`.
+
+`PpqPDF` bundles the things that *don't* change across a fit/MCMC run — the region, the observed dataset, and the normalization quadrature's grid density — at construction, so every subsequent call only needs the physics parameters that the fit is actually varying:
+
+```python
+import sys
+sys.path.insert(0, "python")  # or wherever your checkout's python/ dir lives
+import numpy as np
+from ppq_pdf import PpqPDF
+
+fit = PpqPDF(ep_min, ep_max, eq_min, eq_max, ep_data, eq_data,
+             norm_n_ep=1200, norm_n_eq_window=81, norm_n_window_widths=10.0)
+# norm_n_ep/norm_n_eq_window/norm_n_window_widths are the normalization
+# integral's quadrature grid density -- NOT related to len(ep_data); see
+# PpqN_region's doc comment in src/PpqFort_m.f90.  Larger values trade
+# speed for accuracy -- 1200/81/10.0 agreed with scipy.integrate.quad to
+# ~1e-4 relative on a 247 keV-wide region in test_region_integral.py.
+
+def loglike(k, Z, F0, eps, V, p0, p10, q0, q10):
+    vals = fit.ppqn_values(k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+    norm = fit.ppqn_integral(k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)
+    return np.sum(np.log(vals)) - len(fit.ep_data) * np.log(norm)
+    # or fit.ppqn_normalized_values(...) if you want vals/norm directly
+```
+
+Same shape for the ER band (`ppqg_integral`/`ppqg_values`/`ppqg_normalized_values`, no `k`/`Z` — `Y=1` there). Build `fit` once, outside the fit loop; call its methods once per step, inside.
+
 # Build the singularity/apptainer container for HPC submissions
 There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  
 
