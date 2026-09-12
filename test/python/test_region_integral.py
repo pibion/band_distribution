@@ -11,13 +11,27 @@ Validates the fast rectangular-region normalization integral three ways:
    for the required ridge breakpoints) -- ground truth.
 3. A timing comparison of all three on the same region.
 
+Also validates PpqN_region_adaptive/PpqG_region_adaptive -- the doubling-
+verified nested Gauss-Legendre quadrature that replaced an earlier Cuba/
+Cuhre implementation after Cuhre's own convergence flag was found to be
+unreliable (it reported success on the ER-band target region below at
+~180x worse than the requested accuracy) -- against the same quad
+reference and the fixed grid, including the exact region that broke that
+trust (the "MCMC target region" below) for both bands, plus a check that
+the doubling loop's error-stop safety net actually fires on a
+synthetically unconvergeable request rather than silently returning a
+wrong answer.
+
 Run from the repository root with:
   LD_LIBRARY_PATH=lib python test/python/test_region_integral.py
 """
 
+import io
 import os
+import subprocess
 import sys
 import time
+from contextlib import redirect_stdout
 
 import numpy as np
 
@@ -25,7 +39,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 sys.path.insert(0, os.path.join(REPO_ROOT, "python"))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from ppqfort_pdf import make_ppqg_pdf, make_ppqn_pdf, ppqg_region, ppqn_region
+from ppqfort_pdf import (make_ppqg_pdf, make_ppqn_pdf, ppqg_region, ppqg_region_adaptive,
+                          ppqn_region, ppqn_region_adaptive)
 from region_integral import ppqg_region_integral, ppqn_region_integral
 from band_breakpoints import make_ridge_breakpoints
 from chisquare_harness import debug_bin
@@ -69,14 +84,84 @@ def quad_reference(band, ep_min, ep_max, eq_min, eq_max, params):
                                         **{k: params[k] for k in
                                            ("eps", "V", "p0", "p10", "q0", "q10")},
                                         er_max=700.0, n_window_widths=10.0)
-    import io
-    from contextlib import redirect_stdout
     with redirect_stdout(io.StringIO()):
         result = debug_bin(pdf_func, (ep_min, ep_max, eq_min, eq_max), ridge)
     rel_fixed_grid = abs(result["fixed"] - result["grid_ref"]) / max(abs(result["grid_ref"]), 1e-300)
     if rel_fixed_grid > 1e-2:
         print(f"    NOTE: debug_bin's own fixed vs grid_ref disagree by {rel_fixed_grid:.3e}")
     return float(result["fixed"])
+
+
+# Regions for PpqN_region_adaptive/PpqG_region_adaptive: REGIONS above,
+# plus the user's actual MCMC target region -- the case that surfaced
+# Cuhre's unreliable convergence flag, so it must be in this sweep.
+ADAPTIVE_REGIONS = [
+    (2.0, 200.0, 4.0, 100.0, "MCMC target region"),
+] + REGIONS
+
+ADAPTIVE_TOL = dict(epsrel=1e-4, epsabs=1e-10)
+
+
+def run_adaptive(band, params, region_adaptive_func, region_func):
+    print(f"\n{'='*70}")
+    print(f"Band: {band} (PpqN_region_adaptive/PpqG_region_adaptive)")
+    print(f"{'='*70}")
+    all_ok = True
+    for ep_min, ep_max, eq_min, eq_max, label in ADAPTIVE_REGIONS:
+        t0 = time.time()
+        ref = quad_reference(band, ep_min, ep_max, eq_min, eq_max, params)
+        t_quad = time.time() - t0
+
+        t0 = time.time()
+        fixed_val = region_func(ep_min, ep_max, eq_min, eq_max, **GRID, **params)
+        t_fixed = time.time() - t0
+
+        t0 = time.time()
+        gl_val = region_adaptive_func(ep_min, ep_max, eq_min, eq_max, **ADAPTIVE_TOL, **params)
+        t_gl = time.time() - t0
+
+        rel_gl_quad = abs(gl_val - ref) / max(abs(ref), 1e-300)
+        rel_gl_fixed = abs(gl_val - fixed_val) / max(abs(fixed_val), 1e-300)
+
+        print(f"\n  {label}: Ep in [{ep_min},{ep_max}], Eq in [{eq_min},{eq_max}]")
+        print(f"    quad reference : {ref:.10e}   ({t_quad*1000:.1f} ms)")
+        print(f"    fixed grid     : {fixed_val:.10e}   ({t_fixed*1000:.1f} ms)")
+        print(f"    GL adaptive    : {gl_val:.10e}   ({t_gl*1000:.1f} ms)  "
+              f"rel vs quad: {rel_gl_quad:.3e}  rel vs fixed grid: {rel_gl_fixed:.3e}  "
+              f"speedup vs fixed grid: {t_fixed/t_gl if t_gl > 0 else float('inf'):.1f}x")
+
+        ok = rel_gl_quad < 5e-4 and rel_gl_fixed < 5e-4
+        print(f"    {'PASS' if ok else 'FAIL'}")
+        all_ok = all_ok and ok
+    return all_ok
+
+
+def run_nonconvergence_check():
+    """Confirms the doubling loop's error stop fires (fails loudly)
+    rather than silently returning an unverified number when order 256
+    still can't meet an impossibly tight request -- the safety net this
+    whole design exists for must itself be proven to work, not assumed
+    to.  error stop terminates the process, so this runs in a subprocess
+    and checks the exit code and message rather than catching an
+    exception in-process."""
+    print(f"\n{'='*70}")
+    print("Safety net: error stop fires on a non-convergent request")
+    print(f"{'='*70}")
+    script = (
+        "import sys; sys.path.insert(0, 'python'); "
+        "from ppqfort_pdf import ppqn_region_adaptive; "
+        "ppqn_region_adaptive(2.0, 200.0, 4.0, 100.0, epsrel=1e-300, epsabs=0.0, "
+        "k=0.18, Z=32.0, F0=0.122, eps=3.0e-3, V=3.0, "
+        "p0=0.06421907, p10=0.48998486, q0=0.23718488, q10=0.27093151)"
+    )
+    proc = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT,
+                           capture_output=True, text=True,
+                           env={**os.environ, "LD_LIBRARY_PATH": os.path.join(REPO_ROOT, "lib")})
+    fired = proc.returncode != 0 and "did not converge" in proc.stderr
+    print(f"    exit code: {proc.returncode}")
+    print(f"    stderr tail: {proc.stderr.strip().splitlines()[-1] if proc.stderr.strip() else '(empty)'}")
+    print(f"    {'PASS' if fired else 'FAIL'} -- error stop {'fired' if fired else 'did NOT fire'} as expected")
+    return fired
 
 
 def run(band, params, region_integral_func, region_func):
@@ -117,8 +202,13 @@ if __name__ == "__main__":
     ok_nr = run("NR", PARAMS_NR, ppqn_region_integral, ppqn_region)
     ok_er = run("ER", PARAMS_ER, ppqg_region_integral, ppqg_region)
 
+    ok_nr_gl = run_adaptive("NR", PARAMS_NR, ppqn_region_adaptive, ppqn_region)
+    ok_er_gl = run_adaptive("ER", PARAMS_ER, ppqg_region_adaptive, ppqg_region)
+
+    ok_safety_net = run_nonconvergence_check()
+
     print(f"\n{'='*70}")
-    if ok_nr and ok_er:
+    if ok_nr and ok_er and ok_nr_gl and ok_er_gl and ok_safety_net:
         print("ALL PASS")
     else:
         print("FAILURES ABOVE")

@@ -91,6 +91,24 @@ def _load_library():
     ]
     _api.PpqG_region.restype = ctypes.c_double
 
+    _api.PpqN_region_adaptive.argtypes = [
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
+        ctypes.c_double, ctypes.c_double,                                    # epsrel, epsabs
+        ctypes.c_double, ctypes.c_double, ctypes.c_double,                   # k, Z, F0
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
+        ctypes.c_double, ctypes.c_double,                                    # q0, q10
+    ]
+    _api.PpqN_region_adaptive.restype = ctypes.c_double
+
+    _api.PpqG_region_adaptive.argtypes = [
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
+        ctypes.c_double, ctypes.c_double,                                    # epsrel, epsabs
+        ctypes.c_double,                                                     # F0
+        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
+        ctypes.c_double, ctypes.c_double,                                    # q0, q10
+    ]
+    _api.PpqG_region_adaptive.restype = ctypes.c_double
+
     return _api
 
 
@@ -175,6 +193,36 @@ def ppqg_region(ep_min, ep_max, eq_min, eq_max, *,
     return api.PpqG_region(ep_min, ep_max, eq_min, eq_max,
                             n_ep, n_eq_window, n_window_widths,
                             F0, eps, V, p0, p10, q0, q10)
+
+
+def ppqn_region_adaptive(ep_min, ep_max, eq_min, eq_max, *,
+                          epsrel, epsabs,
+                          k, Z, F0, eps, V, p0, p10, q0, q10):
+    """
+    Same integral as ppqn_region, computed instead with a doubling-
+    verified nested Gauss-Legendre quadrature (see PpqFort_s.f90's
+    region_integral_gl) instead of a fixed grid -- much lower latency for
+    MCMC-scale repeated calls, especially on wide regions. epsrel/epsabs
+    set how tightly two successive doubled quadrature orders must agree
+    before the result is trusted (no defaults: the caller must decide how
+    tight a tolerance the fit needs); the Fortran side error-stops rather
+    than returning an unverified number if that isn't reached by its
+    highest order.
+    """
+    api = _load_library()
+    return api.PpqN_region_adaptive(ep_min, ep_max, eq_min, eq_max,
+                                     epsrel, epsabs,
+                                     k, Z, F0, eps, V, p0, p10, q0, q10)
+
+
+def ppqg_region_adaptive(ep_min, ep_max, eq_min, eq_max, *,
+                          epsrel, epsabs,
+                          F0, eps, V, p0, p10, q0, q10):
+    """Same as ppqn_region_adaptive but for PpqG (electron-recoil band, Y=1)."""
+    api = _load_library()
+    return api.PpqG_region_adaptive(ep_min, ep_max, eq_min, eq_max,
+                                     epsrel, epsabs,
+                                     F0, eps, V, p0, p10, q0, q10)
 
 
 def _make_threaded_pdf(eval_chunk, n_workers):
