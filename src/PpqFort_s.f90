@@ -48,16 +48,17 @@ submodule(PpqFort_m) PpqFort_s
   end type detector_params_t
 
   ! ---------------------------------------------------------------------
-  ! Gauss-Legendre doubling-verified quadrature: PpqN_region_adaptive /
-  ! PpqG_region_adaptive.  Replaces an earlier Cuba/Cuhre-based
-  ! implementation (generic adaptive cubature) dropped after real testing
-  ! showed Cuhre's own convergence flag is not trustworthy for this
-  ! integrand at loose tolerances (it reported success on the ER-band
-  ! target region at ~180x worse than the requested accuracy).  Unlike
-  ! Cuhre, we already know exactly where the band ridge is
-  ! (ridge_eq_and_width/build_ridge_table, reused unchanged from
-  ! region_integral below) so no generic subdivision is needed to find
-  ! it; what actually made the fixed grid slow was trapezoid's O(h^2)
+  ! Gauss-Legendre doubling-verified quadrature: PpqN_region / PpqG_region.
+  ! Replaces an earlier fixed-grid trapezoid implementation (superseded
+  ! entirely -- no reason to keep both once this is faster and more
+  ! accurate) and, before that, a Cuba/Cuhre-based implementation
+  ! (generic adaptive cubature) dropped after real testing showed
+  ! Cuhre's own convergence flag is not trustworthy for this integrand at
+  ! loose tolerances (it reported success on the ER-band target region at
+  ! ~180x worse than the requested accuracy).  Unlike Cuhre, we already
+  ! know exactly where the band ridge is (ridge_eq_and_width/
+  ! build_ridge_table) so no generic subdivision is needed to find it;
+  ! what actually made the old fixed grid slow was trapezoid's O(h^2)
   ! convergence, not "not knowing where to look". Gauss-Legendre converges
   ! spectrally for the smooth integrand integrate_band is once inside the
   ! ridge window, so a modest order reaches the same accuracy as the fixed
@@ -73,7 +74,7 @@ submodule(PpqFort_m) PpqFort_s
   !   python3 -c "import numpy as np; x,w = np.polynomial.legendre.leggauss(32); print(x); print(w)"
   include "gl_tables.f90.inc"
 
-  ! Same table resolution region_integral's build_ridge_table uses.
+  ! Table resolution used by build_ridge_table below.
   integer(c_int), parameter :: region_ridge_n_tab = 4000
 
 contains
@@ -243,13 +244,13 @@ contains
 
   ! PpqN_region / PpqG_region: integral of PpqN/PpqG over a rectangular
   ! (Ep,Eq) region, e.g. to normalize a likelihood to its fit region.
-  ! See region_integral for the algorithm.
+  ! See region_integral_gl for the algorithm.
   module procedure PpqN_region
       type(detector_params_t) :: pars
 
       pars = make_params(k, Z, F0, eps, V, p0, p10, q0, q10, .false.)
-      res = region_integral(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
-                            n_window_widths, pars, .false.)
+      res = region_integral_gl(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
+                               pars, .false.)
   end procedure PpqN_region
 
   module procedure PpqG_region
@@ -257,25 +258,9 @@ contains
 
       ! k, Z are unused when is_gamma is .true.; placeholders as elsewhere.
       pars = make_params(0.0d0, 0.0d0, F0, eps, V, p0, p10, q0, q10, .true.)
-      res = region_integral(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
-                            n_window_widths, pars, .true.)
-  end procedure PpqG_region
-
-  module procedure PpqN_region_adaptive
-      type(detector_params_t) :: pars
-
-      pars = make_params(k, Z, F0, eps, V, p0, p10, q0, q10, .false.)
-      res = region_integral_gl(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
-                               pars, .false.)
-  end procedure PpqN_region_adaptive
-
-  module procedure PpqG_region_adaptive
-      type(detector_params_t) :: pars
-
-      pars = make_params(0.0d0, 0.0d0, F0, eps, V, p0, p10, q0, q10, .true.)
       res = region_integral_gl(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
                                pars, .true.)
-  end procedure PpqG_region_adaptive
+  end procedure PpqG_region
 
   ! ---------------------------------------------------------------------
   ! Private helpers
@@ -883,82 +868,19 @@ contains
       width = sqrt(sigq_val**2 + (slope * sigp_val)**2)
   end subroutine ridge_eq_and_width
 
-  ! Integral of PpqN/PpqG over [ep_min,ep_max] x [eq_min,eq_max]: a
-  ! nested nested trapezoid sum, not a flattened tensor grid -- the
-  ! inner Eq window is centred on the local ridge and so differs at
-  ! every outer Ep point.  n_ep, n_eq_window, n_window_widths are the
-  ! caller's explicit grid-density/window-size choices (see PpqN_region's
-  ! doc comment in PpqFort_m.f90); off-band regions integrate to ~0
-  ! naturally since integrate_band already returns 0 there.
-  pure function region_integral(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
-      n_window_widths, pars, is_gamma) result(res)
-      real(c_double), intent(in) :: ep_min, ep_max, eq_min, eq_max
-      integer, intent(in) :: n_ep, n_eq_window
-      real(c_double), intent(in) :: n_window_widths
-      type(detector_params_t), intent(in) :: pars
-      logical, intent(in) :: is_gamma
-      real(c_double) :: res
-      integer, parameter :: n_tab = 4000
-      real(c_double) :: ep_tab(n_tab), eq_tab(n_tab)
-      real(c_double) :: er_hi, h_ep
-      real(c_double) :: ep_i, eqr, width, eq_lo, eq_hi, h_eq, eq_j, f_j, inner, w_ep
-      integer :: i, j
-
-      if (n_ep < 2 .or. n_eq_window < 2) &
-          error stop "PpqN_region/PpqG_region: n_ep and n_eq_window must each be >= 2"
-
-      ! Ep(Er) >= Er always (yield is non-negative), so er_hi need only
-      ! comfortably exceed the largest Ep or Eq of interest.
-      er_hi = max(ep_max, eq_max) * 1.5d0 + 10.0d0
-      call build_ridge_table(pars, is_gamma, er_hi, n_tab, ep_tab, eq_tab)
-
-      h_ep = (ep_max - ep_min) / real(n_ep - 1, c_double)
-
-      res = 0.0d0
-      do concurrent (i = 1:n_ep) default(none) reduce(+: res) &
-          shared(ep_min, h_ep, n_ep, eq_min, eq_max, n_eq_window, n_window_widths, &
-                 ep_tab, eq_tab, pars, is_gamma) &
-          local(ep_i, eqr, width, eq_lo, eq_hi, h_eq, j, eq_j, f_j, inner, w_ep)
-
-          ep_i = ep_min + real(i - 1, c_double) * h_ep
-          call ridge_eq_and_width(ep_i, ep_tab, eq_tab, n_tab, pars, eqr, width)
-
-          eq_lo = max(eq_min, eqr - n_window_widths * width)
-          eq_hi = min(eq_max, eqr + n_window_widths * width)
-
-          inner = 0.0d0
-          if (eq_hi > eq_lo) then
-              h_eq = (eq_hi - eq_lo) / real(n_eq_window - 1, c_double)
-              do j = 1, n_eq_window
-                  eq_j = eq_lo + real(j - 1, c_double) * h_eq
-                  f_j = integrate_band(ep_i, eq_j, pars, is_gamma)
-                  if (j == 1 .or. j == n_eq_window) then
-                      inner = inner + 0.5d0 * f_j
-                  else
-                      inner = inner + f_j
-                  end if
-              end do
-              inner = inner * h_eq
-          end if
-
-          w_ep = merge(0.5d0, 1.0d0, i == 1 .or. i == n_ep)
-          res = res + w_ep * inner
-      end do
-      res = res * h_ep
-  end function region_integral
-
-  ! One nested Gauss-Legendre pass at order n_ord (same order used for
-  ! both the outer Ep sweep and each inner ridge-window Eq sweep):
-  ! structurally the same as region_integral below (outer do concurrent
-  ! over Ep, inner sequential loop over the local ridge-centred Eq
-  ! window from ridge_eq_and_width), with Gauss-Legendre nodes/weights
-  ! (mapped from [-1,1] onto each real interval) in place of trapezoid.
-  ! A degenerate window (ridge entirely outside [eq_min,eq_max]) simply
-  ! contributes 0, same as region_integral.
-  ! nodes_ep/n_ord_ep and nodes_eq/n_ord_eq are independent: the inner
-  ! ridge-window Eq sweep is already tightly bounded (ridge-centred, width
-  ! set by n_window_widths), so it needs measurably fewer points than the
-  ! outer Ep sweep for the same accuracy (checked empirically -- see the
+  ! One nested Gauss-Legendre pass at order n_ord: outer do concurrent
+  ! over Gauss-Legendre nodes on Ep, inner sequential loop over
+  ! Gauss-Legendre nodes spanning the local ridge-centred Eq window from
+  ! ridge_eq_and_width (nodes/weights mapped from [-1,1] onto each real
+  ! interval). A degenerate window (ridge entirely outside
+  ! [eq_min,eq_max]) simply contributes 0.
+  ! nodes_ep/n_ord_ep and nodes_eq/n_ord_eq are independent parameters,
+  ! but region_integral_gl below always calls this with them equal:
+  ! pairing the inner Eq sweep with a lower order than the outer Ep sweep
+  ! was tried (reasoning the ridge-centred window needs less resolution)
+  ! and measured *slower* overall, since the coarser Eq resolution made
+  ! coarse/fine agreement harder to reach, forcing escalation to a higher
+  ! Ep order than the matched-order scheme needed -- see the
   ! doubling ladder's pairing below).
   pure function gl_region_pass(ep_min, ep_max, eq_min, eq_max, ep_tab, eq_tab, n_tab, &
       pars, is_gamma, n_window_widths, &
@@ -1130,7 +1052,7 @@ contains
       end do
   end function gl_multi_segment_pass
 
-  ! Doubling-verified driver for PpqN_region_adaptive/PpqG_region_adaptive:
+  ! Doubling-verified driver for PpqN_region/PpqG_region:
   ! order 32 vs 64, then 64 vs 128, then 128 vs 256; accepts the finer
   ! estimate the first time two successive orders agree within
   ! max(epsabs, epsrel*|result|), or fails loudly (error stop) if order
@@ -1208,7 +1130,7 @@ contains
           return
       end if
 
-      error stop "PpqN_region_adaptive/PpqG_region_adaptive: Gauss-Legendre doubling " // &
+      error stop "PpqN_region/PpqG_region: Gauss-Legendre doubling " // &
                   "did not converge to the requested epsrel/epsabs by order 256"
   end function region_integral_gl
 

@@ -104,9 +104,9 @@ docker run --rm -v $(pwd)/figures:/app/figures band_distribution_intel \
 
 # Normalizing a likelihood fit to a region: `PpqPDF`
 
-A likelihood fit needs the *un-normalized* PDF at each data point and the PDF's integral over the fit region (to normalize it) — both re-evaluated at every step as the fit/MCMC explores parameter space.  Computing that normalization with `scipy.integrate.quad` is several seconds per call (it evaluates the PDF one point at a time, at the ~3-25 ms/point *scalar* cost — see `python/ppqfort_pdf.py`'s docstring); `python/ppq_pdf.py`'s `PpqPDF` instead uses a ridge-aware fixed grid evaluated in one batched, thread-parallel call (`PpqN_region`/`PpqG_region` in Fortran — same physics as `test/python/band_breakpoints.py`'s ridge/width derivation), landing in the millisecond range under `ifx`/`flang`.
+A likelihood fit needs the *un-normalized* PDF at each data point and the PDF's integral over the fit region (to normalize it) — both re-evaluated at every step as the fit/MCMC explores parameter space.  Computing that normalization with `scipy.integrate.quad` is several seconds per call (it evaluates the PDF one point at a time, at the ~3-25 ms/point *scalar* cost — see `python/ppqfort_pdf.py`'s docstring); `python/ppq_pdf.py`'s `PpqPDF` instead uses a doubling-verified nested Gauss-Legendre quadrature evaluated in one batched, thread-parallel call (`PpqN_region`/`PpqG_region` in Fortran — the ridge location/width is already known exactly, same physics as `test/python/band_breakpoints.py`'s ridge/width derivation, so it needs far fewer points than a naive grid for the same accuracy), landing well under a second per call even for a wide region under `ifx`/`flang`.
 
-`PpqPDF` bundles the things that *don't* change across a fit/MCMC run — the region, the observed dataset, and the normalization quadrature's grid density — at construction, so every subsequent call only needs the physics parameters that the fit is actually varying:
+`PpqPDF` bundles the things that *don't* change across a fit/MCMC run — the region, the observed dataset, and the normalization quadrature's convergence tolerance — at construction, so every subsequent call only needs the physics parameters that the fit is actually varying:
 
 ```python
 import sys
@@ -115,12 +115,13 @@ import numpy as np
 from ppq_pdf import PpqPDF
 
 fit = PpqPDF(ep_min, ep_max, eq_min, eq_max, ep_data, eq_data,
-             norm_n_ep=1200, norm_n_eq_window=81, norm_n_window_widths=10.0)
-# norm_n_ep/norm_n_eq_window/norm_n_window_widths are the normalization
-# integral's quadrature grid density -- NOT related to len(ep_data); see
-# PpqN_region's doc comment in src/PpqFort_m.f90.  Larger values trade
-# speed for accuracy -- 1200/81/10.0 agreed with scipy.integrate.quad to
-# ~1e-4 relative on a 247 keV-wide region in test_region_integral.py.
+             norm_epsrel=1e-4, norm_epsabs=1e-10)
+# norm_epsrel/norm_epsabs set how tightly two successive doubled
+# quadrature orders must agree before the normalization integral is
+# trusted (see PpqN_region's doc comment in src/PpqFort_m.f90) -- NOT
+# related to len(ep_data).  1e-4/1e-10 agreed with scipy.integrate.quad
+# to ~1e-12 relative across the regions tested in
+# test_region_integral.py, including a 247 keV-wide region.
 
 def loglike(k, Z, F0, eps, V, p0, p10, q0, q10):
     vals = fit.ppqn_values(k=k, Z=Z, F0=F0, eps=eps, V=V, p0=p0, p10=p10, q0=q0, q10=q10)

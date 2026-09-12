@@ -73,8 +73,7 @@ def _load_library():
 
     _api.PpqN_region.argtypes = [
         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
-        ctypes.c_int, ctypes.c_int,                                          # n_ep, n_eq_window
-        ctypes.c_double,                                                     # n_window_widths
+        ctypes.c_double, ctypes.c_double,                                    # epsrel, epsabs
         ctypes.c_double, ctypes.c_double, ctypes.c_double,                   # k, Z, F0
         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
         ctypes.c_double, ctypes.c_double,                                    # q0, q10
@@ -83,31 +82,12 @@ def _load_library():
 
     _api.PpqG_region.argtypes = [
         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
-        ctypes.c_int, ctypes.c_int,                                          # n_ep, n_eq_window
-        ctypes.c_double,                                                     # n_window_widths
+        ctypes.c_double, ctypes.c_double,                                    # epsrel, epsabs
         ctypes.c_double,                                                     # F0
         ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
         ctypes.c_double, ctypes.c_double,                                    # q0, q10
     ]
     _api.PpqG_region.restype = ctypes.c_double
-
-    _api.PpqN_region_adaptive.argtypes = [
-        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
-        ctypes.c_double, ctypes.c_double,                                    # epsrel, epsabs
-        ctypes.c_double, ctypes.c_double, ctypes.c_double,                   # k, Z, F0
-        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
-        ctypes.c_double, ctypes.c_double,                                    # q0, q10
-    ]
-    _api.PpqN_region_adaptive.restype = ctypes.c_double
-
-    _api.PpqG_region_adaptive.argtypes = [
-        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # ep_min, ep_max, eq_min, eq_max
-        ctypes.c_double, ctypes.c_double,                                    # epsrel, epsabs
-        ctypes.c_double,                                                     # F0
-        ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,  # eps, V, p0, p10
-        ctypes.c_double, ctypes.c_double,                                    # q0, q10
-    ]
-    _api.PpqG_region_adaptive.restype = ctypes.c_double
 
     return _api
 
@@ -165,64 +145,38 @@ def make_ppqg_pdf(*, F0, eps, V, p0, p10, q0, q10, n_workers=None):
 
 
 def ppqn_region(ep_min, ep_max, eq_min, eq_max, *,
-                 n_ep, n_eq_window, n_window_widths,
+                 epsrel, epsabs,
                  k, Z, F0, eps, V, p0, p10, q0, q10):
     """
     Integral of PpqN over [ep_min,ep_max] x [eq_min,eq_max], computed
     entirely in Fortran (a single call, no per-point ctypes round trips)
-    -- see region_integral.py's docstring for the algorithm and why this
-    is much faster than nested scipy.integrate.quad.  region_integral.py
-    reimplements the same algorithm in Python (batched through
-    make_ppqn_pdf) as an independent cross-check of this function.
+    with a doubling-verified nested Gauss-Legendre quadrature (see
+    PpqFort_s.f90's region_integral_gl) -- the ridge location/width is
+    already known exactly (ridge_eq_and_width), so this needs far fewer
+    points than a naive grid or generic adaptive cubature for the same
+    accuracy, and is much faster than nested scipy.integrate.quad.
 
-    n_ep, n_eq_window, n_window_widths are required (no defaults): they
-    directly control the accuracy of a number that feeds a likelihood
-    normalization.
+    epsrel/epsabs are required (no defaults): they set how tightly two
+    successive doubled quadrature orders must agree before the result is
+    trusted, and directly control the accuracy of a number that feeds a
+    likelihood normalization. The Fortran side error-stops rather than
+    returning an unverified number if that isn't reached by its highest
+    order.
     """
     api = _load_library()
     return api.PpqN_region(ep_min, ep_max, eq_min, eq_max,
-                            n_ep, n_eq_window, n_window_widths,
+                            epsrel, epsabs,
                             k, Z, F0, eps, V, p0, p10, q0, q10)
 
 
 def ppqg_region(ep_min, ep_max, eq_min, eq_max, *,
-                 n_ep, n_eq_window, n_window_widths,
+                 epsrel, epsabs,
                  F0, eps, V, p0, p10, q0, q10):
     """Same as ppqn_region but for PpqG (electron-recoil band, Y=1)."""
     api = _load_library()
     return api.PpqG_region(ep_min, ep_max, eq_min, eq_max,
-                            n_ep, n_eq_window, n_window_widths,
+                            epsrel, epsabs,
                             F0, eps, V, p0, p10, q0, q10)
-
-
-def ppqn_region_adaptive(ep_min, ep_max, eq_min, eq_max, *,
-                          epsrel, epsabs,
-                          k, Z, F0, eps, V, p0, p10, q0, q10):
-    """
-    Same integral as ppqn_region, computed instead with a doubling-
-    verified nested Gauss-Legendre quadrature (see PpqFort_s.f90's
-    region_integral_gl) instead of a fixed grid -- much lower latency for
-    MCMC-scale repeated calls, especially on wide regions. epsrel/epsabs
-    set how tightly two successive doubled quadrature orders must agree
-    before the result is trusted (no defaults: the caller must decide how
-    tight a tolerance the fit needs); the Fortran side error-stops rather
-    than returning an unverified number if that isn't reached by its
-    highest order.
-    """
-    api = _load_library()
-    return api.PpqN_region_adaptive(ep_min, ep_max, eq_min, eq_max,
-                                     epsrel, epsabs,
-                                     k, Z, F0, eps, V, p0, p10, q0, q10)
-
-
-def ppqg_region_adaptive(ep_min, ep_max, eq_min, eq_max, *,
-                          epsrel, epsabs,
-                          F0, eps, V, p0, p10, q0, q10):
-    """Same as ppqn_region_adaptive but for PpqG (electron-recoil band, Y=1)."""
-    api = _load_library()
-    return api.PpqG_region_adaptive(ep_min, ep_max, eq_min, eq_max,
-                                     epsrel, epsabs,
-                                     F0, eps, V, p0, p10, q0, q10)
 
 
 def _make_threaded_pdf(eval_chunk, n_workers):

@@ -77,55 +77,32 @@ module PpqFort_m
     real(c_double) :: res
   end function PpqFullN
 
-  pure module function PpqN_region(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
-      n_window_widths, k, Z, F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN_region")
+  pure module function PpqN_region(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
+      k, Z, F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN_region")
     !! Integral of PpqN over the rectangle [ep_min,ep_max] x [eq_min,eq_max],
-    !! e.g. for normalizing a likelihood to its fit region.  n_ep is the
-    !! number of (outer) Ep grid points; n_eq_window is the number of
-    !! (inner) Eq grid points spanning the local ridge window at each Ep,
-    !! whose half-width is n_window_widths local band widths (see
-    !! band_breakpoints.py for the reference derivation of the ridge
-    !! location and width this mirrors).
-    real(c_double), value :: ep_min, ep_max, eq_min, eq_max
-    integer(c_int), value :: n_ep, n_eq_window
-    real(c_double), value :: n_window_widths, k, Z, F0, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function PpqN_region
-
-  pure module function PpqG_region(ep_min, ep_max, eq_min, eq_max, n_ep, n_eq_window, &
-      n_window_widths, F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG_region")
-    !! Same as PpqN_region but for PpqG (electron-recoil band, Y=1).
-    real(c_double), value :: ep_min, ep_max, eq_min, eq_max
-    integer(c_int), value :: n_ep, n_eq_window
-    real(c_double), value :: n_window_widths, F0, eps, V, p0, p10, q0, q10
-    real(c_double) :: res
-  end function PpqG_region
-
-  pure module function PpqN_region_adaptive(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
-      k, Z, F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqN_region_adaptive")
-    !! Same integral as PpqN_region (over [ep_min,ep_max] x [eq_min,eq_max]),
-    !! computed instead with a doubling-verified nested Gauss-Legendre
-    !! quadrature: the ridge location/width machinery already used by
-    !! PpqN_region (see ridge_eq_and_width in PpqFort_s.f90) tells this
-    !! exactly where to look, so it needs far fewer points than the fixed
-    !! grid for the same accuracy. epsrel/epsabs set how tightly two
-    !! successive doubled orders (32 vs 64, 64 vs 128, 128 vs 256) must
-    !! agree before the result is trusted: this stops refining once
+    !! e.g. for normalizing a likelihood to its fit region.  Computed with
+    !! a doubling-verified nested Gauss-Legendre quadrature: the ridge
+    !! location/width machinery (ridge_eq_and_width in PpqFort_s.f90)
+    !! already tells this exactly where the band is, so it needs far
+    !! fewer points than a naive fixed grid for the same accuracy.
+    !! epsrel/epsabs set how tightly two successive doubled quadrature
+    !! orders (32 vs 64, 64 vs 128, 128 vs 256) must agree before the
+    !! result is trusted: this stops refining once
     !! |result_2N - result_N| <= max(epsabs, epsrel*|result_2N|), and
     !! error-stops rather than returning an unverified number if order 256
     !! still hasn't converged.
     real(c_double), value :: ep_min, ep_max, eq_min, eq_max, epsrel, epsabs
     real(c_double), value :: k, Z, F0, eps, V, p0, p10, q0, q10
     real(c_double) :: res
-  end function PpqN_region_adaptive
+  end function PpqN_region
 
-  pure module function PpqG_region_adaptive(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
-      F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG_region_adaptive")
-    !! Same as PpqN_region_adaptive but for PpqG (electron-recoil band, Y=1).
+  pure module function PpqG_region(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
+      F0, eps, V, p0, p10, q0, q10) result(res) bind(c, name="PpqG_region")
+    !! Same as PpqN_region but for PpqG (electron-recoil band, Y=1).
     real(c_double), value :: ep_min, ep_max, eq_min, eq_max, epsrel, epsabs
     real(c_double), value :: F0, eps, V, p0, p10, q0, q10
     real(c_double) :: res
-  end function PpqG_region_adaptive
+  end function PpqG_region
 
   pure module subroutine PpqFort_version(major, minor, patch) bind(c, name="PpqFort_version")
     !! Report the package version (see fpm.toml's version field, which
