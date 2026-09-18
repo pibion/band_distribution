@@ -1052,6 +1052,44 @@ contains
       end do
   end function gl_multi_segment_pass
 
+  ! Reject parameter sets the physics model cannot evaluate, up front and
+  ! loudly.  The resolution model sigp^2 = p0^2 + (p10^2 - p0^2)(Ep/c)^2
+  ! (likewise sigq) goes negative at high energy whenever p10 < p0 (q10 <
+  ! q0), and the resulting NaNs previously sent the integrator into its
+  ! slowest fallback paths -- minutes per call instead of a fast failure --
+  ! which is intolerable inside an MCMC where a bad proposal must just be
+  ! rejected.  All checks are written as .not. (x > ...) so NaN inputs
+  ! fail them too.
+  pure subroutine validate_region_inputs(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, &
+      pars, is_gamma)
+      real(c_double), intent(in) :: ep_min, ep_max, eq_min, eq_max, epsrel, epsabs
+      type(detector_params_t), intent(in) :: pars
+      logical, intent(in) :: is_gamma
+
+      if (.not. (ep_max > ep_min .and. eq_max > eq_min)) &
+          error stop "PpqN_region/PpqG_region: invalid region: need ep_max > ep_min and eq_max > eq_min"
+      if (.not. (epsrel >= 0.0d0 .and. epsabs >= 0.0d0)) &
+          error stop "PpqN_region/PpqG_region: invalid tolerance: epsrel and epsabs must be >= 0"
+      if (.not. (pars%F0 > 0.0d0)) &
+          error stop "PpqN_region/PpqG_region: invalid parameters: Fano factor F0 must be > 0"
+      if (.not. (pars%eps > 0.0d0)) &
+          error stop "PpqN_region/PpqG_region: invalid parameters: eps must be > 0"
+      if (.not. (1.0d0 + pars%V / (pars%eps * 1.0d3) > 0.0d0)) &
+          error stop "PpqN_region/PpqG_region: invalid parameters: need 1 + V/(1000*eps) > 0"
+      if (.not. (pars%p0 > 0.0d0 .and. pars%q0 > 0.0d0)) &
+          error stop "PpqN_region/PpqG_region: invalid parameters: p0 and q0 must be > 0"
+      if (.not. (pars%p10 >= pars%p0)) &
+          error stop "PpqN_region/PpqG_region: invalid parameters: p10 < p0 makes the phonon resolution sigp^2 negative at high energy"
+      if (.not. (pars%q10 >= pars%q0)) &
+          error stop "PpqN_region/PpqG_region: invalid parameters: q10 < q0 makes the charge resolution sigq^2 negative at high energy"
+      if (.not. is_gamma) then
+          if (.not. (pars%k > 0.0d0)) &
+              error stop "PpqN_region: invalid parameters: k must be > 0"
+          if (.not. (pars%Zfac > 0.0d0 .and. pars%Zfac < huge(1.0d0))) &
+              error stop "PpqN_region: invalid parameters: Z must be > 0"
+      end if
+  end subroutine validate_region_inputs
+
   ! Doubling-verified driver for PpqN_region/PpqG_region:
   ! order 32 vs 64, then 64 vs 128, then 128 vs 256; accepts the finer
   ! estimate the first time two successive orders agree within
@@ -1075,6 +1113,8 @@ contains
       integer :: n_brk, n_seg
       real(c_double) :: ep_bounds(4)
       real(c_double) :: res32, res64, res128, res256
+
+      call validate_region_inputs(ep_min, ep_max, eq_min, eq_max, epsrel, epsabs, pars, is_gamma)
 
       er_hi = max(ep_max, eq_max) * 1.5d0 + 10.0d0
       call build_ridge_table(pars, is_gamma, er_hi, n_tab, ep_tab, eq_tab)

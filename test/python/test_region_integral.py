@@ -133,13 +133,54 @@ def run_nonconvergence_check():
     return fired
 
 
+def run_invalid_input_check():
+    """Confirms invalid parameter sets error out immediately (seconds, not
+    minutes) with a clear message.  Before the guard existed, p10 < p0
+    (negative sigp^2 at high energy -> NaNs) ground for 15+ minutes per
+    call -- fatal inside an MCMC, where a bad proposal must just be
+    rejected quickly."""
+    print(f"\n{'='*70}")
+    print("Guard: invalid parameters error out immediately")
+    print(f"{'='*70}")
+    base = dict(k=0.18, Z=32.0, F0=0.122, eps=3.0e-3, V=3.0,
+                p0=0.06421907, p10=0.48998486, q0=0.23718488, q10=0.27093151)
+    cases = [
+        ("p10 < p0",   dict(p0=0.35, p10=0.30), "p10 < p0"),
+        ("q10 < q0",   dict(q0=0.30, q10=0.25), "q10 < q0"),
+        ("F0 = 0",     dict(F0=0.0), "F0 must be > 0"),
+        ("k <= 0",     dict(k=-0.1), "k must be > 0"),
+        ("NaN in p0",  dict(p0=float("nan")), "p0 and q0 must be > 0"),
+    ]
+    all_ok = True
+    for label, override, expect in cases:
+        params = dict(base, **override)
+        script = ("import sys; sys.path.insert(0, 'python'); nan = float('nan'); "
+                  "from ppqfort_pdf import ppqn_region; "
+                  f"ppqn_region(2.0, 200.0, 4.0, 100.0, epsrel=1e-4, epsabs=1e-10, **{params!r})")
+        t0 = time.time()
+        try:
+            proc = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT, capture_output=True,
+                                  text=True, timeout=60,
+                                  env={**os.environ, "LD_LIBRARY_PATH": os.path.join(REPO_ROOT, "lib")})
+            dt = time.time() - t0
+            ok = proc.returncode != 0 and expect in proc.stderr and dt < 30
+            print(f"    {label:10s}: exit {proc.returncode} in {dt:.2f} s  {'PASS' if ok else 'FAIL'}"
+                  f"{'' if ok else '  stderr: ' + proc.stderr.strip()[-200:]}")
+        except subprocess.TimeoutExpired:
+            ok = False
+            print(f"    {label:10s}: TIMED OUT (>60 s) FAIL -- guard did not fire")
+        all_ok = all_ok and ok
+    return all_ok
+
+
 if __name__ == "__main__":
     ok_nr = run("NR", PARAMS_NR, ppqn_region)
     ok_er = run("ER", PARAMS_ER, ppqg_region)
     ok_safety_net = run_nonconvergence_check()
+    ok_guard = run_invalid_input_check()
 
     print(f"\n{'='*70}")
-    if ok_nr and ok_er and ok_safety_net:
+    if ok_nr and ok_er and ok_safety_net and ok_guard:
         print("ALL PASS")
     else:
         print("FAILURES ABOVE")

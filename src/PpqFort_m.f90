@@ -90,7 +90,10 @@ module PpqFort_m
     !! result is trusted: this stops refining once
     !! |result_2N - result_N| <= max(epsabs, epsrel*|result_2N|), and
     !! error-stops rather than returning an unverified number if order 256
-    !! still hasn't converged.
+    !! still hasn't converged.  Parameter sets the model cannot evaluate
+    !! (p10 < p0 or q10 < q0, which make the resolution variance negative
+    !! at high energy; F0, eps, p0, q0, k, Z <= 0; empty region; NaN
+    !! inputs) error-stop immediately instead of grinding.
     real(c_double), value :: ep_min, ep_max, eq_min, eq_max, epsrel, epsabs
     real(c_double), value :: k, Z, F0, eps, V, p0, p10, q0, q10
     real(c_double) :: res
