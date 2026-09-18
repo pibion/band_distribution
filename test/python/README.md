@@ -17,6 +17,8 @@ build `lib/libband_distribution.so` first.
 | `test_chisquare_ppqn.py` | Self-consistency: events sampled *from* the Fortran `PpqN` follow `PpqN`. |
 | `test_chisquare_nr_simulator.py` | Physics: events from the independent NR simulator follow the Fortran `PpqN`. |
 | `test_chisquare_er_simulator.py` | Physics: events from the independent ER simulator follow the Fortran `PpqG`. |
+| `test_region_integral.py` | The region-normalization integral (`ppqn_region`/`ppqg_region`) against nested `scipy.integrate.quad`, timing, the non-convergence safety net, and the fast error-out on invalid parameters (p10 < p0 etc.). |
+| `test_normgrid.py` | The precomputed-table pipeline (`python/normgrid.py`): interpolant exactness, no-extrapolation, crash-tolerant worker, HDF5 round trip. No Fortran needed. |
 
 The two simulator tests are the strongest statement: the event generator
 (`generate_events.py`) knows nothing about the PDF's integrals — it draws

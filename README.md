@@ -132,6 +132,39 @@ def loglike(k, Z, F0, eps, V, p0, p10, q0, q10):
 
 Same shape for the ER band (`ppqg_integral`/`ppqg_values`/`ppqg_normalized_values`, no `k`/`Z` — `Y=1` there). Build `fit` once, outside the fit loop; call its methods once per step, inside.
 
+# Precomputed normalization tables for MCMC: `python/normgrid.py`
+
+Even at ~2 s, computing the normalization integral at every MCMC step is out of the question.  But the region is fixed for a whole run and the integral is a very smooth function of the physics parameters the MCMC varies, so `normgrid.py` evaluates it once on a small tensor grid (one independent integral per grid point — a good fit for the OSG) and interpolates it at tens of microseconds per step.  Separate tables for the NR band (`k, F0, V, p0, p10, q0, q10`) and the ER band (same, no `k`); `Z` and `eps` are fixed inside a table and checked on every call.
+
+A few design points worth knowing:
+
+* **Axes.** `k`, `F0` (used *linearly* — the integral is smooth in F0 but not in log F0, so 3 nodes give ~3e-9 where log F0 needs 9+), `V`, `p0`, `dp = p10 - p0`, `q0`, `q10`.  The resolution model `sigp² = p0² + (p10² - p0²)(Ep/c)²` is only defined for `p10 >= p0` (likewise `q10 >= q0`), so a plain `(p0, p10)` box would contain unphysical corners; `dp >= 0` keeps the box rectangular.  `PpqN_region`/`PpqG_region` now error out in ~0.3 s on such inputs (and on `F0, eps, p0, q0, k, Z <= 0`, an empty region, or NaN) instead of grinding for minutes.
+* **Interpolant.** Tensor-product polynomial through Chebyshev–Lobatto nodes (barycentric Lagrange; exact at the nodes).  It **never extrapolates** — a query outside the table's box raises `OutOfBoxError`, so keep the MCMC prior inside the box (default box: `k` 0.13–0.22, `F0` 1e-5–1, `V` 2.7–3.3, `p0` 0.2–0.4, `p10-p0` 0–0.4, `q0` 0.04–0.08, `q10` 0.2–0.4; edit `DEFAULT_BOX` for a different one).
+* **Node counts** (`RECOMMENDED_NODES`, from per-axis studies against directly computed held-out points; the default region is 2–200 / 4–100): NR `k=7 F0=3 V=4 p0=2 dp=3 q0=3 q10=3` (4,536 points); ER `F0=3 V=10 p0=4 dp=5 q0=3 q10=5` (9,000 points; the ER band is sensitive to `V` through the Ep edge).  These target ~1e-7 worst-case error per axis, i.e. ~0.02 in the log-likelihood at 20,000 events (the error is `N_events × δN/N`).  Always confirm with `validate` — the per-axis studies cannot see cross terms.
+
+```
+# describe the grid (defaults: RECOMMENDED_NODES, the box above, the 2-200/4-100 region)
+python python/normgrid.py make-spec --band NR --out spec_NR.json
+python python/normgrid.py make-random-spec --band NR --n 200 --out held_NR.json   # held-out validation points
+
+# run it: on one machine, or as batch jobs (osg/normgrid.sub + osg/normgrid_job.sh are an HTCondor template)
+python python/normgrid.py chunks spec_NR.json --size 100        # "start stop" ranges, one per job
+python python/normgrid.py run --spec spec_NR.json --start 0 --stop 100 --out res_0.txt
+python python/normgrid.py run --spec held_NR.json --out res_held.txt
+
+# combine into one HDF5 file and check it against the held-out points
+python python/normgrid.py merge --spec spec_NR.json --results 'res_*.txt' --out norm_NR.h5
+python python/normgrid.py validate --table norm_NR.h5 --heldout-spec held_NR.json --results res_held.txt
+```
+
+`run` is resumable and crash-tolerant: Fortran `error stop` (e.g. the quadrature not certifying `epsrel=1e-7`) kills the process, so a supervisor records that point as `nan` and restarts past it; re-run failures with a looser tolerance via `run --retry-failed --epsrel 1e-6`.  `merge` refuses to build a table with missing points.  The HDF5 file records the region, fixed parameters, library version and git commit it was built with — rebuild if any of those change.  (`h5py` is in `environment.yaml`.)  Then hand the tables to `PpqPDF`; nothing else in the fit changes:
+
+```python
+fit = PpqPDF(ep_min, ep_max, eq_min, eq_max, ep_data, eq_data,
+             ppqn_table="norm_NR.h5", ppqg_table="norm_ER.h5")   # region must match the tables
+# fit.ppqn_integral(...) / fit.ppqg_integral(...) now interpolate instead of integrating
+```
+
 # Build the singularity/apptainer container for HPC submissions
 There are multiple Dockerfiles, each building the code with a compiler from a different vendor (GNU, Intel, and LLVM).  
 

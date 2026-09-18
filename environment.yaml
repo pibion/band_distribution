@@ -23,6 +23,8 @@ dependencies:
   - numpy<2
   - scipy
   - pandas
+  # h5py: reading/writing the precomputed normalization tables (python/normgrid.py)
+  - h5py
   - pip
   - pip:
     - equibin

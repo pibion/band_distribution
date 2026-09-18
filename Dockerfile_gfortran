@@ -31,9 +31,10 @@ RUN apt-get update && apt-get install -y \
 # scripts under test/python/ (test_chisquare_*.py, chisquare_harness.py,
 # sample_from_pdf.py); not available via apt, unlike numpy/scipy above.
 # Matches the same three packages environment.yaml installs for the
-# ifx/flang containers.
+# ifx/flang containers.  h5py is for the precomputed normalization
+# tables (python/normgrid.py).
 RUN pip install --break-system-packages --no-cache-dir \
-    matplotlib equibin lintsampler
+    matplotlib equibin lintsampler h5py
 
 # Set up working directory
 WORKDIR /app
