@@ -10,11 +10,11 @@
 #
 #   python python/normgrid.py make-spec --band NR --out spec_NR.json     # RECOMMENDED_NODES
 #   python python/normgrid.py make-random-spec --band NR --n 200 --out held_NR.json
-#   N=$(python python/normgrid.py chunks spec_NR.json --size 100 | wc -l)
-#   sbatch --array=0-$((N-1))%200 slurm/normgrid.sbatch spec_NR.json 100 results
+#   N=$(python python/normgrid.py chunks spec_NR.json --size 500 | wc -l)
+#   sbatch --array=0-$((N-1))%200 slurm/normgrid.sbatch spec_NR.json 500 results
 #   # same for the held-out validation points (used by `validate` below):
-#   N=$(python python/normgrid.py chunks held_NR.json --size 20 | wc -l)
-#   sbatch --array=0-$((N-1)) slurm/normgrid.sbatch held_NR.json 20 results
+#   N=$(python python/normgrid.py chunks held_NR.json --size 100 | wc -l)
+#   sbatch --array=0-$((N-1)) slurm/normgrid.sbatch held_NR.json 100 results
 #
 #   # when the arrays are done (quick; run on a login node or interactively):
 #   python python/normgrid.py merge --spec spec_NR.json --results 'results/res_spec_NR_*.txt' \
@@ -22,9 +22,11 @@
 #   python python/normgrid.py validate --table tables/norm_NR_region2-200_4-100.h5 \
 #          --heldout-spec held_NR.json --results 'results/res_held_NR_*.txt'
 #
-# Arguments: SPEC.json  [CHUNK_SIZE=100]  [RESULTS_DIR=results]
-#   Pick CHUNK_SIZE so a task runs ~10-30 min (a point takes ~3-10 s of one
-#   core), and the %200 throttle to what the cluster is happy with.
+# Arguments: SPEC.json  [CHUNK_SIZE=500]  [RESULTS_DIR=results]
+#   Pick CHUNK_SIZE so a task runs ~10-30 min, and the %200 throttle to what
+#   the cluster is happy with.  A point took ~1 s of one core with the flang
+#   image (measured under x86 emulation on a laptop; expect the same or better
+#   on the cluster), so CHUNK_SIZE=500 is ~10 min.  gfortran is ~25x slower.
 #
 # Robustness: `normgrid run` is resumable and crash-tolerant (a point whose
 # integral errors out is recorded as nan and the worker restarts past it).
@@ -55,7 +57,7 @@ set -euo pipefail
 
 : "${SLURM_ARRAY_TASK_ID:?submit as a job array: sbatch --array=0-N-1 slurm/normgrid.sbatch SPEC [SIZE] [DIR] (see the header)}"
 SPEC=${1:?usage: slurm/normgrid.sbatch SPEC.json [CHUNK_SIZE] [RESULTS_DIR]}
-SIZE=${2:-100}
+SIZE=${2:-500}
 OUT_DIR=${3:-results}
 mkdir -p "$OUT_DIR"
 
