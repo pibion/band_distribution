@@ -31,9 +31,9 @@ resolution model sigp^2 = p0^2 + (p10^2 - p0^2)(Ep/c)^2 is only defined for
 p10 >= p0 (dp >= 0; likewise q10 >= q0), so a plain (p0, p10) box would
 contain unphysical corners.  The ER band does not depend on k.
 
-Interpolation is a tensor-product polynomial through Chebyshev-Lobatto nodes
-(barycentric Lagrange form), exact at the nodes; N nodes on an axis means a
-degree N-1 polynomial along it.  It never extrapolates: a query outside the
+Interpolation is a tensor-product polynomial through Chebyshev-Lobatto nodes,
+built and evaluated with numpy.polynomial.chebyshev (chebfit/chebval), exact
+at the nodes; N nodes on an axis means a degree N-1 polynomial along it.  It never extrapolates: a query outside the
 table's box raises OutOfBoxError.
 
 Usage:  python normgrid.py --help   (run with LD_LIBRARY_PATH=lib so the
@@ -50,6 +50,7 @@ import sys
 import time
 
 import numpy as np
+from numpy.polynomial import chebyshev as cheb
 
 AXES = ("k", "F0", "V", "p0", "dp", "q0", "q10")
 BAND_AXES = {"NR": AXES, "ER": tuple(a for a in AXES if a != "k")}
@@ -358,19 +359,12 @@ def merge(spec_path, result_paths, out_path, allow_missing=False):
 # Interpolator
 # ---------------------------------------------------------------------------
 
-def _bary_weights(nodes):
-    n = len(nodes)
-    if n == 1:
-        return np.ones(1)
-    w = np.empty(n)
-    for j in range(n):
-        w[j] = 1.0 / np.prod(nodes[j] - np.delete(nodes, j))
-    return w
-
-
 class NormInterpolator:
-    """Tensor-product polynomial interpolant of a precomputed normalization
-    table.  Call with physical parameters:
+    """Tensor-product Chebyshev interpolant of a precomputed normalization
+    table, built and evaluated with numpy.polynomial.chebyshev (no scipy).
+    The table's values sit at Chebyshev-Lobatto nodes, so fitting a degree
+    n-1 Chebyshev series along an n-node axis interpolates exactly through
+    them.  Call with physical parameters:
 
         norm = table(k=..., F0=..., V=..., p0=..., p10=..., q0=..., q10=...)   # NR
         norm = table(F0=..., V=..., p0=..., p10=..., q0=..., q10=...)          # ER
@@ -381,14 +375,25 @@ class NormInterpolator:
     def __init__(self, axes, nodes, values, *, band, region, fixed, source=""):
         self.axes = tuple(axes)
         self.nodes = [np.asarray(nodes[a], dtype=float) for a in self.axes]
-        self.values = np.asarray(values, dtype=float)
-        if self.values.shape != tuple(len(n) for n in self.nodes):
+        values = np.asarray(values, dtype=float)
+        if values.shape != tuple(len(n) for n in self.nodes):
             raise ValueError("values shape does not match node counts")
-        if not np.all(np.isfinite(self.values)):
+        if not np.all(np.isfinite(values)):
             raise ValueError("table contains missing/failed points; refusing to build an interpolant")
         self.band, self.region, self.fixed, self.source = band, tuple(region), dict(fixed), source
-        self._weights = [_bary_weights(n) for n in self.nodes]
         self.box = {a: (n[0], n[-1]) for a, n in zip(self.axes, self.nodes)}
+        # values at nodes -> Chebyshev coefficients, one axis at a time
+        coef = values
+        for d, x in enumerate(self.nodes):
+            c = np.moveaxis(coef, d, 0)
+            c = cheb.chebfit(self._to_unit(d, x), c.reshape(len(x), -1), len(x) - 1).reshape(c.shape)
+            coef = np.moveaxis(c, 0, d)
+        self._coef = coef
+
+    def _to_unit(self, d, x):
+        """Axis d coordinate -> [-1, 1] (a single node is a constant axis)."""
+        lo, hi = self.nodes[d][0], self.nodes[d][-1]
+        return 2 * (x - lo) / (hi - lo) - 1 if hi > lo else np.zeros_like(x)
 
     @classmethod
     def from_hdf5(cls, path):
@@ -414,25 +419,15 @@ class NormInterpolator:
 
     def __call__(self, *, F0, V, p0, p10, q0, q10, k=None, Z=None, eps=None):
         c = self._coords(k, F0, V, p0, p10, q0, q10, Z, eps)
-        arr = self.values
-        for a, n, w in zip(self.axes, self.nodes, self._weights):
+        coef = self._coef
+        for d, a in enumerate(self.axes):
             x = c[a]
-            lo, hi = n[0], n[-1]
-            tol = 1e-12 * max(abs(hi - lo), 1e-300)
-            if not (lo - tol <= x <= hi + tol) or x != x:
+            lo, hi = self.box[a]
+            tol = 1e-12 * (hi - lo)
+            if not (lo - tol <= x <= hi + tol):          # also catches NaN
                 raise OutOfBoxError(f"{a}={x!r} outside the table's range [{lo}, {hi}]")
-            if len(n) == 1:
-                basis = np.ones(1)
-            else:
-                d = x - n
-                hit = np.flatnonzero(np.abs(d) <= 1e-14 * (hi - lo))
-                if len(hit):
-                    basis = np.zeros(len(n)); basis[hit[0]] = 1.0
-                else:
-                    t = w / d
-                    basis = t / t.sum()
-            arr = np.tensordot(basis, arr, axes=(0, 0))
-        return float(arr)
+            coef = cheb.chebval(self._to_unit(d, np.float64(min(max(x, lo), hi))), coef)   # contracts the first remaining axis
+        return float(coef)
 
 
 # ---------------------------------------------------------------------------
