@@ -143,9 +143,10 @@ A few design points worth knowing:
 * **Node counts** (`RECOMMENDED_NODES`, from per-axis studies against directly computed held-out points; the default region is 2–200 / 4–100): NR `k=7 F0=3 V=4 p0=3 dp=3 q0=5 dq=3` (11,340 points); ER `F0=3 V=11 p0=4 dp=6 q0=6 dq=10` (47,520 points; the ER band is sensitive to `V` through the Ep edge and to the charge resolution).  At about 1 s per point on one core that is roughly 3 and 13 core-hours.  These target ~1e-7 worst-case error per axis, i.e. ~0.02 in the log-likelihood at 20,000 events (the error is `N_events × δN/N`).  Always confirm with `validate` — the per-axis studies cannot see cross terms.
 
 ```
-# describe the grid (defaults: RECOMMENDED_NODES, the box above, the 2-200/4-100 region)
-python python/normgrid.py make-spec --band NR --out spec_NR.json
-python python/normgrid.py make-random-spec --band NR --n 200 --out held_NR.json   # held-out validation points
+# describe the grid (region and epsrel are required; nodes default to RECOMMENDED_NODES
+# and the box to the one above -- a wrong region makes a table that looks fine and isn't)
+python python/normgrid.py make-spec --band NR --region 2 200 4 100 --epsrel 1e-7 --out spec_NR.json
+python python/normgrid.py make-random-spec --band NR --n 200 --region 2 200 4 100 --epsrel 1e-7 --out held_NR.json
 
 # run it: on one machine, or as batch jobs (osg/normgrid.sub + osg/normgrid_job.sh are an HTCondor template)
 python python/normgrid.py chunks spec_NR.json --size 100        # "start stop" ranges, one per job

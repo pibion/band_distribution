@@ -496,16 +496,27 @@ def main(argv=None):
     p.add_argument("--band", required=True, choices=["NR", "ER"])
     p.add_argument("--nodes", nargs="+", default=None, metavar="AXIS=N",
                    help="nodes per axis, e.g. k=7 F0=3 V=4 p0=2 dp=3 q0=3 dq=3 (ER: no k); default: RECOMMENDED_NODES")
-    p.add_argument("--region", nargs=4, type=float, default=DEFAULT_REGION, metavar=("EP_MIN", "EP_MAX", "EQ_MIN", "EQ_MAX"))
-    p.add_argument("--epsrel", type=float, default=1e-7)
+    # --region and --epsrel are required, not defaulted, for the same reason
+    # ppqn_region takes no default epsrel/epsabs: a wrong value here produces a
+    # table that is complete, internally consistent and wrong.  Neither merge
+    # nor validate can see it -- they only ever compare a table against points
+    # computed from the same spec -- so it would surface at the earliest in
+    # PpqPDF's region check, and only if the fit gets that far.  (--nodes and
+    # the box do default: validate measures node adequacy directly, and a bad
+    # box raises OutOfBoxError at query time.  Both fail loudly.)
+    p.add_argument("--region", nargs=4, type=float, required=True, metavar=("EP_MIN", "EP_MAX", "EQ_MIN", "EQ_MAX"),
+                   help="fit region the table normalizes over; must match the region PpqPDF is built with")
+    p.add_argument("--epsrel", type=float, required=True,
+                   help="quadrature convergence tolerance per point, e.g. 1e-7")
     p.add_argument("--out", required=True)
 
     p = sub.add_parser("make-random-spec", help="write a held-out validation point set")
     p.add_argument("--band", required=True, choices=["NR", "ER"])
     p.add_argument("--n", type=int, required=True)
     p.add_argument("--seed", type=int, default=12345)
-    p.add_argument("--region", nargs=4, type=float, default=DEFAULT_REGION)
-    p.add_argument("--epsrel", type=float, default=1e-7)
+    p.add_argument("--region", nargs=4, type=float, required=True, metavar=("EP_MIN", "EP_MAX", "EQ_MIN", "EQ_MAX"),
+                   help="must match the region of the table these points validate")
+    p.add_argument("--epsrel", type=float, required=True)
     p.add_argument("--out", required=True)
 
     p = sub.add_parser("info", help="print a spec's size")
