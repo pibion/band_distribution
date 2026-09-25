@@ -22,13 +22,18 @@ cd "$(dirname "$0")/.."
 ACCOUNT=${ACCOUNT:-dark-matter-salting}
 PARTITION=${PARTITION:-math-alderaan-short}
 TIME=${TIME:-08:00:00}
-GRID_CHUNK=${GRID_CHUNK:-50}     # points per array task
-HELD_CHUNK=${HELD_CHUNK:-20}
+GRID_CHUNK=${GRID_CHUNK:-500}   # points per array task (~1 s/point under flang)
+HELD_CHUNK=${HELD_CHUNK:-100}
 THROTTLE=${THROTTLE:-200}        # max concurrent array tasks
 
 : "${BAND_SIF:=/scratch/$USER/containers/band.sif}"
 [[ -f "$BAND_SIF" ]] || { echo "no container at $BAND_SIF (set BAND_SIF)" >&2; exit 1; }
 export BAND_SIF
+
+# The image was built at 9d251ee; src/ and fpm.toml are unchanged since, so
+# its compiled library is current but its copy of python/ is not.  Take the
+# python side from this checkout instead of rebuilding a 5.9 GB image.
+export BAND_PYTHON_FROM_REPO=1
 
 mkdir -p logs results tables
 

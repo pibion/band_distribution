@@ -44,6 +44,11 @@
 #   BAND_PYTHON      python inside the container (default: the image's conda
 #                    'band' env; the login-shell conda activation in the
 #                    Dockerfile does not happen under apptainer)
+#   BAND_CONTAINER_CMD  force apptainer or singularity (default: whichever is
+#                    on PATH, preferring apptainer)
+#   BAND_PYTHON_FROM_REPO=1  bind this checkout's python/ over the image's
+#                    /app/python, so python-side changes need no image
+#                    rebuild.  Only safe while the image's Fortran is current.
 
 #SBATCH --job-name=normgrid
 #SBATCH --cpus-per-task=1
@@ -71,7 +76,32 @@ if [[ "${BAND_NATIVE:-0}" == "1" ]]; then
     NORMGRID=python/normgrid.py
     export LD_LIBRARY_PATH="$PWD/lib:${LD_LIBRARY_PATH:-}"
 else
-    RUN=(apptainer exec --bind "$PWD:$PWD" --pwd "$PWD" "${BAND_SIF:-$HOME/band.sif}")
+    # apptainer and singularity take the same arguments here; clusters have
+    # one or the other (Alderaan ships only singularity-ce), so take whichever
+    # is on PATH rather than assuming.  BAND_CONTAINER_CMD forces a choice.
+    if [[ -n "${BAND_CONTAINER_CMD:-}" ]]; then
+        CONTAINER_CMD=$BAND_CONTAINER_CMD
+    elif command -v apptainer >/dev/null 2>&1; then
+        CONTAINER_CMD=apptainer
+    elif command -v singularity >/dev/null 2>&1; then
+        CONTAINER_CMD=singularity
+    else
+        echo "neither apptainer nor singularity is on PATH on $(hostname);" >&2
+        echo "set BAND_CONTAINER_CMD, or BAND_NATIVE=1 to use a local build" >&2
+        exit 1
+    fi
+
+    BINDS=(--bind "$PWD:$PWD")
+    # The image carries both the compiled library (/app/lib) and a copy of
+    # python/ taken at build time.  BAND_PYTHON_FROM_REPO=1 binds this
+    # checkout's python/ over /app/python so python-side changes do not need
+    # an image rebuild -- valid exactly while the Fortran in the image is
+    # current, since /app/lib still comes from the image.
+    if [[ "${BAND_PYTHON_FROM_REPO:-0}" == "1" ]]; then
+        BINDS+=(--bind "$PWD/python:/app/python")
+    fi
+
+    RUN=("$CONTAINER_CMD" exec "${BINDS[@]}" --pwd "$PWD" "${BAND_SIF:-$HOME/band.sif}")
     PY=${BAND_PYTHON:-/opt/anaconda/envs/band/bin/python}
     NORMGRID=/app/python/normgrid.py
     export APPTAINERENV_LD_LIBRARY_PATH="/app/lib:/opt/anaconda/envs/band/lib"
