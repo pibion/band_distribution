@@ -30,10 +30,6 @@ THROTTLE=${THROTTLE:-200}        # max concurrent array tasks
 [[ -f "$BAND_SIF" ]] || { echo "no container at $BAND_SIF (set BAND_SIF)" >&2; exit 1; }
 export BAND_SIF
 
-# The image was built at 9d251ee; src/ and fpm.toml are unchanged since, so
-# its compiled library is current but its copy of python/ is not.  Take the
-# python side from this checkout instead of rebuilding a 5.9 GB image.
-export BAND_PYTHON_FROM_REPO=1
 
 mkdir -p logs results tables
 
