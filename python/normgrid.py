@@ -70,6 +70,17 @@ DEFAULT_BOX = {
 }
 DEFAULT_FIXED = {"Z": 32.0, "eps": 3.0e-3}
 
+# Per-band changes to DEFAULT_BOX.  ER: the effective electron-recoil Fano
+# factor at the low fields these detectors run at is ~0.2-0.3 (CDMSlite:
+# 0.21-0.29), above the literature 0.13, so the ER box brackets that instead
+# of the NR box's 1e-5..1.
+BAND_BOX_OVERRIDES = {"ER": {"F0": (0.1, 0.35)}}
+
+
+def default_box(band):
+    """DEFAULT_BOX with the band's overrides applied."""
+    return {**DEFAULT_BOX, **BAND_BOX_OVERRIDES.get(band, {})}
+
 # Node counts per axis that keep the worst-case interpolation error of the
 # default box near 1e-7 per axis (~1e-6 total, i.e. ~0.02 in the log-
 # likelihood at 20,000 events), from per-axis studies against directly
@@ -106,10 +117,11 @@ def _base_spec(kind, band, region, fixed, box, epsrel, epsabs):
 
 
 def make_grid_spec(band, n_nodes, *, region=DEFAULT_REGION, fixed=DEFAULT_FIXED,
-                   box=DEFAULT_BOX, epsrel=1e-7, epsabs=1e-13):
+                   box=None, epsrel=1e-7, epsabs=1e-13):
     """n_nodes: {axis: number of Chebyshev-Lobatto nodes} for every axis of
-    the band (1 pins an axis at its midpoint)."""
-    spec = _base_spec("grid", band, region, fixed, box, epsrel, epsabs)
+    the band (1 pins an axis at its midpoint).  box: None = default_box(band)."""
+    spec = _base_spec("grid", band, region, fixed, default_box(band) if box is None else box,
+                      epsrel, epsabs)
     axes = BAND_AXES[band]
     if set(n_nodes) != set(axes):
         raise ValueError(f"n_nodes must give exactly the axes {axes}, got {sorted(n_nodes)}")
@@ -120,14 +132,15 @@ def make_grid_spec(band, n_nodes, *, region=DEFAULT_REGION, fixed=DEFAULT_FIXED,
 
 
 def make_random_spec(band, n, seed, *, region=DEFAULT_REGION, fixed=DEFAULT_FIXED,
-                     box=DEFAULT_BOX, p10_range=(0.3, 0.6), epsrel=1e-7, epsabs=1e-13):
+                     box=None, p10_range=(0.3, 0.6), epsrel=1e-7, epsabs=1e-13):
     """n held-out points, uniform over the axis box except F0, which
     alternates between log-uniform (even i; how a log-scale prior samples
     it) and uniform (odd i; the high-F0 end, where the dependence is
     strongest), restricted to the prior's p10 range (None = whole box).
     Point i depends only on (seed, i), so any subset can be computed
     independently."""
-    spec = _base_spec("random", band, region, fixed, box, epsrel, epsabs)
+    spec = _base_spec("random", band, region, fixed, default_box(band) if box is None else box,
+                      epsrel, epsabs)
     spec.update(n=int(n), seed=int(seed), p10_range=None if p10_range is None else list(p10_range))
     return spec
 

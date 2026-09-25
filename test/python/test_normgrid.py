@@ -152,6 +152,17 @@ with tempfile.TemporaryDirectory() as d:
               abs(t(**{k: v for k, v in p.items() if k not in ("eps",)}, eps=p["eps"]) - v_direct) < 1e-12 * abs(v_direct))
         check("HDF5 table knows its band/region/fixed", t.band == "ER" and t.region == tuple(ng.DEFAULT_REGION))
 
+# ---- per-band default boxes ------------------------------------------------
+er_grid = ng.make_grid_spec("ER", ng.RECOMMENDED_NODES["ER"])
+nr_grid = ng.make_grid_spec("NR", ng.RECOMMENDED_NODES["NR"])
+check("ER default box narrows F0 to 0.1-0.35", er_grid["box"]["F0"] == [0.1, 0.35])
+check("NR default box keeps F0 1e-5..1", nr_grid["box"]["F0"] == [1e-5, 1.0])
+check("other axes are the same in both bands",
+      all(er_grid["box"][a] == nr_grid["box"][a] for a in er_grid["box"] if a != "F0"))
+er_held = ng.make_random_spec("ER", 40, seed=3)
+check("ER held-out points stay inside the ER F0 box",
+      all(0.1 <= ng.coords_at(er_held, i)["F0"] <= 0.35 for i in range(40)))
+
 print()
 if failures:
     print(f"{len(failures)} FAILED: {failures}")
