@@ -23,13 +23,14 @@ per step.  This module is the whole pipeline:
   NormInterpolator               load the table and evaluate it (numpy only)
 
 Coordinates.  The physical parameters are mapped to axes that make the valid
-region a rectangle: (k, F0, V, p0, dp = p10 - p0, q0, q10).  F0 is used
+region a rectangle: (k, F0, V, p0, dp = p10 - p0, q0, dq = q10 - q0).  F0 is used
 *linearly*, not as log F0: the normalization is smooth in F0 (it enters as a
 variance) but not in log F0, and measured on this problem 3 Chebyshev nodes in
 F0 interpolate to ~3e-9 where log10 F0 needs 9+ nodes for 1e-7.  The
 resolution model sigp^2 = p0^2 + (p10^2 - p0^2)(Ep/c)^2 is only defined for
-p10 >= p0 (dp >= 0; likewise q10 >= q0), so a plain (p0, p10) box would
-contain unphysical corners.  The ER band does not depend on k.
+p10 >= p0 (dp >= 0; likewise q10 >= q0, dq >= 0), so a plain (p0, p10) or
+(q0, q10) box would contain unphysical corners (the q0 and q10 ranges
+overlap, so this matters for q; for the default p ranges p10 > p0 anyway).  The ER band does not depend on k.
 
 Interpolation is a tensor-product polynomial through Chebyshev-Lobatto nodes,
 built and evaluated with numpy.polynomial.chebyshev (chebfit/chebval), exact
@@ -52,21 +53,26 @@ import time
 import numpy as np
 from numpy.polynomial import chebyshev as cheb
 
-AXES = ("k", "F0", "V", "p0", "dp", "q0", "q10")
+AXES = ("k", "F0", "V", "p0", "dp", "q0", "dq")
 BAND_AXES = {"NR": AXES, "ER": tuple(a for a in AXES if a != "k")}
 
-# Bounding rectangle, in axis coordinates, of the MCMC prior box.  dp spans
-# [0, 0.4]: p10 in [0.3, 0.6] with p0 in [0.2, 0.4] and p10 >= p0.  That
-# rectangle also contains valid points outside the prior (e.g. p10 = 0.2 at
-# p0 = 0.2) -- harmless, the interpolant is just not used there.
+# Bounding rectangle, in axis coordinates, of the MCMC prior.  p0 and q0 have
+# Gaussian priors centred on P0_MEAN/Q0_MEAN with a 20% (1 sigma) width, so
+# their boxes are the +/-4 sigma range, i.e. mean * [0.2, 1.8] (the sampler
+# truncates the prior there).  p10 in [0.3, 0.6] and q10 in [0.2, 0.4] give
+# dp = p10 - p0 in [0.3 - 0.1156, 0.6 - 0.0128] and dq = q10 - q0 in
+# [0, 0.4 - 0.0474]; q0 is capped at 0.4 (= max q10) since q10 >= q0.  These
+# rectangles also contain valid points outside the prior (e.g. p10 = 0.19) --
+# harmless, the interpolant is just not used there.
+P0_MEAN, Q0_MEAN = 0.06421907, 0.23718488
 DEFAULT_BOX = {
     "k": (0.13, 0.22),
     "F0": (1e-5, 1.0),
     "V": (2.7, 3.3),
-    "p0": (0.2, 0.4),
-    "dp": (0.0, 0.4),
-    "q0": (0.04, 0.08),
-    "q10": (0.2, 0.4),
+    "p0": (0.2 * P0_MEAN, 1.8 * P0_MEAN),
+    "dp": (0.18, 0.59),
+    "q0": (0.2 * Q0_MEAN, 0.4),
+    "dq": (0.0, 0.353),
 }
 DEFAULT_FIXED = {"Z": 32.0, "eps": 3.0e-3}
 
@@ -87,12 +93,14 @@ def default_box(band):
 # computed held-out points at three baselines (Chebyshev-Lobatto nodes,
 # epsrel=1e-7):  NR k 7 (6e-8), V 4 (4e-9), p0 2 (1e-8), F0/dp/q0/q10 3
 # (<= 4e-9);  ER V 10 (~5e-8, the ER band is sensitive to V through the Ep
-# edge), p0 4 (4e-9), dp/q10 5 (2e-7), F0/q0 3.  Validate any table against
+# edge), p0 4 (4e-9), dp/q10 5 (2e-7), F0/q0 3.  THESE STUDIES USED THE OLD
+# p0/q0/q10 BOXES (p0 0.2-0.4, q0 0.04-0.08); the counts below for p0, dp, q0
+# and dq are PROVISIONAL until the study is redone on the current box.  Validate any table against
 # held-out points (`validate`) rather than trusting these -- they come from
 # one-axis-at-a-time studies and cannot see cross terms.
 RECOMMENDED_NODES = {
-    "NR": {"k": 7, "F0": 3, "V": 4, "p0": 2, "dp": 3, "q0": 3, "q10": 3},
-    "ER": {"F0": 3, "V": 10, "p0": 4, "dp": 5, "q0": 3, "q10": 5},
+    "NR": {"k": 7, "F0": 3, "V": 4, "p0": 2, "dp": 3, "q0": 3, "dq": 3},
+    "ER": {"F0": 3, "V": 10, "p0": 4, "dp": 5, "q0": 3, "dq": 5},
 }
 DEFAULT_REGION = (2.0, 200.0, 4.0, 100.0)
 
@@ -132,16 +140,19 @@ def make_grid_spec(band, n_nodes, *, region=DEFAULT_REGION, fixed=DEFAULT_FIXED,
 
 
 def make_random_spec(band, n, seed, *, region=DEFAULT_REGION, fixed=DEFAULT_FIXED,
-                     box=None, p10_range=(0.3, 0.6), epsrel=1e-7, epsabs=1e-13):
+                     box=None, p10_range=(0.3, 0.6), q10_range=(0.2, 0.4),
+                     epsrel=1e-7, epsabs=1e-13):
     """n held-out points, uniform over the axis box except F0, which
     alternates between log-uniform (even i; how a log-scale prior samples
     it) and uniform (odd i; the high-F0 end, where the dependence is
-    strongest), restricted to the prior's p10 range (None = whole box).
+    strongest), restricted to the prior's p10 and q10 ranges (None = whole box).
     Point i depends only on (seed, i), so any subset can be computed
     independently."""
     spec = _base_spec("random", band, region, fixed, default_box(band) if box is None else box,
                       epsrel, epsabs)
-    spec.update(n=int(n), seed=int(seed), p10_range=None if p10_range is None else list(p10_range))
+    spec.update(n=int(n), seed=int(seed),
+                p10_range=None if p10_range is None else list(p10_range),
+                q10_range=None if q10_range is None else list(q10_range))
     return spec
 
 
@@ -197,10 +208,11 @@ def coords_at(spec, i):
         if i % 2 == 0:
             lo, hi = spec["box"]["F0"]
             c["F0"] = float(math.exp(math.log(lo) + rng.random() * (math.log(hi) - math.log(lo))))
-        rng_range = spec["p10_range"]
-        if rng_range is None or rng_range[0] <= c["p0"] + c["dp"] <= rng_range[1]:
+        p_range, q_range = spec["p10_range"], spec.get("q10_range")   # q10_range absent in old specs
+        if ((p_range is None or p_range[0] <= c["p0"] + c["dp"] <= p_range[1])
+                and (q_range is None or q_range[0] <= c["q0"] + c["dq"] <= q_range[1])):
             return c
-    raise RuntimeError("could not draw a point inside p10_range")
+    raise RuntimeError("could not draw a point inside the p10/q10 ranges")
 
 
 def physical_params(spec, coords):
@@ -208,7 +220,7 @@ def physical_params(spec, coords):
     (minus the region and tolerances)."""
     p = {"F0": coords["F0"], "eps": spec["fixed"]["eps"], "V": coords["V"],
          "p0": coords["p0"], "p10": coords["p0"] + coords["dp"],
-         "q0": coords["q0"], "q10": coords["q10"]}
+         "q0": coords["q0"], "q10": coords["q0"] + coords["dq"]}
     if spec["band"] == "NR":
         p["k"] = coords["k"]
         p["Z"] = spec["fixed"]["Z"]
@@ -421,7 +433,7 @@ class NormInterpolator:
         for name, given in (("Z", Z), ("eps", eps)):
             if given is not None and name in self.fixed and abs(given - self.fixed[name]) > 1e-12 * max(1.0, abs(given)):
                 raise ValueError(f"{name}={given} differs from the {self.fixed[name]} this table was built for")
-        c = {"F0": F0, "V": V, "p0": p0, "dp": p10 - p0, "q0": q0, "q10": q10}
+        c = {"F0": F0, "V": V, "p0": p0, "dp": p10 - p0, "q0": q0, "dq": q10 - q0}
         if self.band == "NR":
             if k is None:
                 raise ValueError("NR table needs k")
@@ -482,7 +494,7 @@ def main(argv=None):
     p = sub.add_parser("make-spec", help="write a grid spec")
     p.add_argument("--band", required=True, choices=["NR", "ER"])
     p.add_argument("--nodes", nargs="+", default=None, metavar="AXIS=N",
-                   help="nodes per axis, e.g. k=7 F0=3 V=4 p0=2 dp=3 q0=3 q10=3 (ER: no k); default: RECOMMENDED_NODES")
+                   help="nodes per axis, e.g. k=7 F0=3 V=4 p0=2 dp=3 q0=3 dq=3 (ER: no k); default: RECOMMENDED_NODES")
     p.add_argument("--region", nargs=4, type=float, default=DEFAULT_REGION, metavar=("EP_MIN", "EP_MAX", "EQ_MIN", "EQ_MAX"))
     p.add_argument("--epsrel", type=float, default=1e-7)
     p.add_argument("--out", required=True)

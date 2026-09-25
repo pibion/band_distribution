@@ -53,24 +53,28 @@ check("lobatto n=1 is the midpoint", ng.chebyshev_lobatto(2.0, 6.0, 1)[0] == 4.0
 check("lobatto n=3 is [lo, mid, hi]", np.allclose(ng.chebyshev_lobatto(0, 1, 3), [0, 0.5, 1]))
 
 # ---- specs / mapping ----
-spec = ng.make_grid_spec("NR", dict(k=3, F0=4, V=2, p0=3, dp=2, q0=2, q10=3))
+spec = ng.make_grid_spec("NR", dict(k=3, F0=4, V=2, p0=3, dp=2, q0=2, dq=3))
 check("grid size", ng.n_points(spec) == 3 * 4 * 2 * 3 * 2 * 2 * 3)
 seen = {tuple(sorted(ng.coords_at(spec, i).items())) for i in range(ng.n_points(spec))}
 check("every grid index maps to a distinct point", len(seen) == ng.n_points(spec))
 c0, c1 = ng.coords_at(spec, 0), ng.coords_at(spec, 1)
-check("last axis varies fastest", c0["q10"] != c1["q10"] and all(c0[a] == c1[a] for a in ng.AXES[:-1]))
+check("last axis varies fastest", c0["dq"] != c1["dq"] and all(c0[a] == c1[a] for a in ng.AXES[:-1]))
 check("out-of-range index raises", raises(IndexError, lambda: ng.coords_at(spec, ng.n_points(spec))))
 check("bad n_nodes rejected", raises(ValueError, lambda: ng.make_grid_spec("NR", dict(k=3))))
 
 ok_p10 = all(ng.physical_params(spec, ng.coords_at(spec, i))["p10"] >= ng.physical_params(spec, ng.coords_at(spec, i))["p0"]
              for i in range(ng.n_points(spec)))
 check("grid: p10 >= p0 at every point (rectangular box, no unphysical corners)", ok_p10)
+ok_q10 = all(ng.physical_params(spec, ng.coords_at(spec, i))["q10"] >= ng.physical_params(spec, ng.coords_at(spec, i))["q0"]
+             for i in range(ng.n_points(spec)))
+check("grid: q10 >= q0 at every point", ok_q10)
 rs = ng.make_random_spec("NR", 500, seed=7)
 ps = [ng.physical_params(rs, ng.coords_at(rs, i)) for i in range(500)]
 check("random: p10 within the prior range and >= p0", all(0.3 <= p["p10"] <= 0.6 and p["p10"] >= p["p0"] for p in ps))
+check("random: q10 within the prior range and >= q0", all(0.2 <= p["q10"] <= 0.4 and p["q10"] >= p["q0"] for p in ps))
 check("random points are reproducible per index", ng.coords_at(rs, 123) == ng.coords_at(rs, 123)
       and ng.coords_at(rs, 123) != ng.coords_at(rs, 124))
-er = ng.make_grid_spec("ER", dict(F0=2, V=2, p0=2, dp=2, q0=2, q10=2))
+er = ng.make_grid_spec("ER", dict(F0=2, V=2, p0=2, dp=2, q0=2, dq=2))
 check("ER spec has no k axis and no Z", "k" not in ng.axes_of(er) and "k" not in ng.physical_params(er, ng.coords_at(er, 0))
       and "Z" not in ng.physical_params(er, ng.coords_at(er, 0)))
 
@@ -84,19 +88,20 @@ rng = np.random.default_rng(0)
 worst = 0.0
 for _ in range(50):
     c = {a: rng.uniform(*ng.DEFAULT_BOX[a]) for a in ng.AXES}
-    val = table(k=c["k"], F0=c["F0"], V=c["V"], p0=c["p0"], p10=c["p0"] + c["dp"], q0=c["q0"], q10=c["q10"])
+    val = table(k=c["k"], F0=c["F0"], V=c["V"], p0=c["p0"], p10=c["p0"] + c["dp"], q0=c["q0"], q10=c["q0"] + c["dq"])
     worst = max(worst, abs(val - poly(c, degs)) / abs(poly(c, degs)))
 check("interpolant reproduces a representable polynomial exactly", worst < 1e-12, f"worst rel err {worst:.1e}")
 node_pt = {a: nodes[a][len(nodes[a]) // 2] for a in ng.AXES}
 v = table(k=node_pt["k"], F0=node_pt["F0"], V=node_pt["V"], p0=node_pt["p0"],
-          p10=node_pt["p0"] + node_pt["dp"], q0=node_pt["q0"], q10=node_pt["q10"])
+          p10=node_pt["p0"] + node_pt["dp"], q0=node_pt["q0"], q10=node_pt["q0"] + node_pt["dq"])
 check("exact at a node", abs(v - poly(node_pt, degs)) < 1e-13 * abs(v))
-mid = dict(k=0.175, F0=1e-2, V=3.0, p0=0.3, p10=0.5, q0=0.06, q10=0.3)
+mid = dict(k=0.175, F0=1e-2, V=3.0, p0=0.064, p10=0.5, q0=0.2, q10=0.3)
 check("out of box raises (k)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, k=0.5))))
 check("out of box raises (V)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, V=2.0))))
 check("out of box raises (F0 too large)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, F0=10.0))))
 check("out of box raises (F0 <= 0)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, F0=0.0))))
-check("p10 < p0 raises (dp < 0)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, p10=0.2))))
+check("p10 < p0 raises (dp < 0)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, p10=0.05))))
+check("q10 < q0 raises (dq < 0)", raises(ng.OutOfBoxError, lambda: table(**dict(mid, q10=0.15))))
 check("NaN raises", raises(ng.OutOfBoxError, lambda: table(**dict(mid, q0=float("nan")))))
 check("NR table requires k", raises(ValueError, lambda: table(**{k: v for k, v in mid.items() if k != "k"})))
 check("mismatched Z rejected", raises(ValueError, lambda: table(**mid, Z=40.0)))
@@ -118,7 +123,7 @@ check("PpqPDF rejects a table for the wrong band", raises(ValueError, lambda: Pp
 # ---- worker: crash tolerance, resume, retry (fake evaluator) ----
 os.environ["NORMGRID_FAKE"] = "1"
 with tempfile.TemporaryDirectory() as d:
-    er2 = ng.make_grid_spec("ER", dict(F0=2, V=2, p0=2, dp=2, q0=2, q10=2))     # 64 points
+    er2 = ng.make_grid_spec("ER", dict(F0=2, V=2, p0=2, dp=2, q0=2, dq=2))     # 64 points
     sp, out = os.path.join(d, "spec.json"), os.path.join(d, "r.txt")
     ng.save_spec(er2, sp)
     os.environ["NORMGRID_FAKE_CRASH"] = "5"
