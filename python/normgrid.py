@@ -89,18 +89,19 @@ def default_box(band):
 
 # Node counts per axis that keep the worst-case interpolation error of the
 # default box near 1e-7 per axis (~1e-6 total, i.e. ~0.02 in the log-
-# likelihood at 20,000 events), from per-axis studies against directly
-# computed held-out points at three baselines (Chebyshev-Lobatto nodes,
-# epsrel=1e-7):  NR k 7 (6e-8), V 4 (4e-9), p0 2 (1e-8), F0/dp/q0/q10 3
-# (<= 4e-9);  ER V 10 (~5e-8, the ER band is sensitive to V through the Ep
-# edge), p0 4 (4e-9), dp/q10 5 (2e-7), F0/q0 3.  THESE STUDIES USED THE OLD
-# p0/q0/q10 BOXES (p0 0.2-0.4, q0 0.04-0.08); the counts below for p0, dp, q0
-# and dq are PROVISIONAL until the study is redone on the current box.  Validate any table against
-# held-out points (`validate`) rather than trusting these -- they come from
-# one-axis-at-a-time studies and cannot see cross terms.
+# likelihood at 20,000 events).  From one-axis-at-a-time studies on the
+# current box against directly computed points (Chebyshev-Lobatto nodes,
+# epsrel=1e-7, worst of three baselines spanning the box), smallest n with
+# error <= 1e-7:  NR k 7, F0 2, V 4, p0 2, dp 3, q0 5, dq 3;  ER F0 2, V 11,
+# p0 4, dp 6, q0 6, dq 10 (dq only reaches ~2e-8, the integrals' own noise
+# floor is ~1e-8).  Used below with a margin: F0 3 everywhere, NR p0 3.  ER
+# is expensive in V and dq because the ER band is sensitive to V through the
+# Ep edge and to the charge resolution.  Validate any table against held-out
+# points (`validate`) rather than trusting these -- one-axis-at-a-time studies
+# cannot see cross terms.
 RECOMMENDED_NODES = {
-    "NR": {"k": 7, "F0": 3, "V": 4, "p0": 2, "dp": 3, "q0": 3, "dq": 3},
-    "ER": {"F0": 3, "V": 10, "p0": 4, "dp": 5, "q0": 3, "dq": 5},
+    "NR": {"k": 7, "F0": 3, "V": 4, "p0": 3, "dp": 3, "q0": 5, "dq": 3},      # 11,340 points
+    "ER": {"F0": 3, "V": 11, "p0": 4, "dp": 6, "q0": 6, "dq": 10},            # 47,520 points
 }
 DEFAULT_REGION = (2.0, 200.0, 4.0, 100.0)
 
